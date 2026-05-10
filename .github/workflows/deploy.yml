@@ -48,21 +48,29 @@ jobs:
           NEXTAUTH_URL: https://fintracker-jl.azurewebsites.net
           NEXTAUTH_SECRET: build-time-placeholder-replaced-at-runtime
 
-      - name: Package artifact
+      - name: Assemble standalone bundle
         run: |
-          zip -r release.zip . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x "tests/*" \
-            -x "**/*.test.ts" \
-            -x "**/*.test.tsx" \
-            -x ".next/cache/*" \
-            -x "assets/*" \
-            -x "session-state/*" \
-            -x ".env*" \
-            -x "DESIGN.md" \
-            -x "plan.md" \
-            -x "README.md"
+          mkdir -p deploy
+          # Next.js standalone server.js + minimal node_modules.
+          cp -r .next/standalone/. deploy/
+          # Static assets and Prisma engines that standalone doesn't auto-include.
+          mkdir -p deploy/.next
+          cp -r .next/static deploy/.next/static
+          if [ -d public ]; then cp -r public deploy/public; fi
+          # Prisma needs the schema and the query-engine binary at runtime.
+          mkdir -p deploy/prisma
+          cp prisma/schema.prisma deploy/prisma/schema.prisma
+          cp -r node_modules/.prisma deploy/node_modules/.prisma
+          cp -r node_modules/@prisma deploy/node_modules/@prisma
+          # Tell App Service how to start.
+          cat > deploy/package.json <<'JSON'
+          { "name": "fintracker", "private": true, "scripts": { "start": "node server.js" } }
+          JSON
+          du -sh deploy
+
+      - name: Package artifact
+        working-directory: deploy
+        run: zip -rq ../release.zip .
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
