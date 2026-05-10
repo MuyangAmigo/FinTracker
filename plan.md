@@ -274,6 +274,29 @@ Guardrails:
 
 ## Implementation phases
 
+### Status
+
+- Phase 1 — done (commit `8068776`)
+- Phase 2 — done (commit `41d15d1`)
+- Phase 3 — done (commits `a8c2bc3` schema/seed code, `0f3c137` Neon migration applied)
+- Phase 4 — next
+- Phases 5-8 — pending
+
+### Phase 3 outcome (recap)
+
+- Prisma 6.19.3 + PostgreSQL on Neon `ap-southeast-1` (project `ep-autumn-voice-aocw5599`)
+- Full domain schema migrated: 16 models, 11 enums (`prisma/migrations/20260510124315_init`)
+- Seeded: 1 household ("Junjie & Jin You"), 23 categories (bilingual: Salary/工资, Lifestyle/玩乐金, Couple fund/恋爱金, Splurge/冤大头, …), 9 import aliases, 12 accounts (Alipay, WeChat, CMB, China Bank, ICBC, CITIC, HSBC, WeBank, ESPP, Stock, Life Insurance, Investment misc)
+- `lib/db.ts` HMR-safe Prisma singleton; `lib/auth/household.ts` upserts User + Household + Membership on first sign-in; `lib/auth/audit.ts` now persists to `audit_events` (best-effort, never blocks auth)
+- `lib/validation/finance.ts` zod schemas for transaction / account / snapshot / budget writes
+- `dotenv-cli` wired so `prisma:*` and `db:seed` scripts read `.env.local`
+
+### Open Phase-4 questions to settle before starting
+
+- Imports: commit raw rows on upload, or always require an explicit "approve & commit" review step? (Plan currently leans: stage → review → commit.)
+- For "Salary - Junjie" style person scope, do we tag the transaction with `personTag` or assign it to a per-person account? (Plan currently leans: `personTag` only; accounts stay shared unless explicitly per-person like ESPP.)
+- For the "Household Finance Management" CSVs that contain monthly totals (not individual transactions), do we materialize a synthetic transaction per month/category, or store them as a separate "MonthlyTotals" facet so we don't fake transactional data?
+
 ### Phase 1: Product and architecture baseline
 
 - Scaffold the web application.
