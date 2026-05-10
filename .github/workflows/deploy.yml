@@ -50,27 +50,21 @@ jobs:
 
       - name: Assemble standalone bundle
         run: |
-          mkdir -p deploy
-          # Next.js standalone server.js + minimal node_modules.
-          cp -r .next/standalone/. deploy/
-          # Static assets and Prisma engines that standalone doesn't auto-include.
-          mkdir -p deploy/.next
-          cp -r .next/static deploy/.next/static
-          if [ -d public ]; then cp -r public deploy/public; fi
-          # Prisma needs the schema and the query-engine binary at runtime.
-          mkdir -p deploy/prisma
-          cp prisma/schema.prisma deploy/prisma/schema.prisma
-          cp -r node_modules/.prisma deploy/node_modules/.prisma
-          cp -r node_modules/@prisma deploy/node_modules/@prisma
-          # Tell App Service how to start.
-          cat > deploy/package.json <<'JSON'
+          # Static assets and the prisma schema aren't included by Next's
+          # standalone tracer; copy them in next to server.js.
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -r public .next/standalone/public; fi
+          mkdir -p .next/standalone/prisma
+          cp prisma/schema.prisma .next/standalone/prisma/schema.prisma
+          # App Service expects an `npm start` script.
+          cat > .next/standalone/package.json <<'JSON'
           { "name": "fintracker", "private": true, "scripts": { "start": "node server.js" } }
           JSON
-          du -sh deploy
+          du -sh .next/standalone
 
       - name: Package artifact
-        working-directory: deploy
-        run: zip -rq ../release.zip .
+        working-directory: .next/standalone
+        run: zip -rq "$GITHUB_WORKSPACE/release.zip" .
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
