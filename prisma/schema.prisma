@@ -454,6 +454,10 @@ model ImportRow {
   rawValue      String?
   // Computed from sourceRow + originalLabel + rawValue. Used to dedupe.
   rowHash       String
+  // Typed ParsedRecord payload (lib/imports/types.ts). Carries the resolved
+  // date / kind / amount / currency so commit doesn't have to re-parse the
+  // source CSV. Kept as JSON to stay schema-flexible across formats.
+  parsed        Json?
   status        ImportRowStatus @default(PARSED)
   errorMessage  String?
   createdAt     DateTime        @default(now())
