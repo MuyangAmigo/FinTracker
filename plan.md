@@ -279,8 +279,9 @@ Guardrails:
 - Phase 1 — done (commit `8068776`)
 - Phase 2 — done (commit `41d15d1`)
 - Phase 3 — done (commits `a8c2bc3` schema/seed code, `0f3c137` Neon migration applied)
-- Phase 4 — next
-- Phases 5-8 — pending
+- Phase 4 — done (commit `e7937db`); all 8 legacy CSVs import 0-error → 247 AccountSnapshot rows + 402 Transaction rows on Neon
+- Phase 5 — next
+- Phases 6-8 — pending
 
 ### Phase 3 outcome (recap)
 
