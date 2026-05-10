@@ -414,14 +414,30 @@ Cross-cutting: aggregate metric generators, structured insight validation/storag
 
 Split into **8a (go live)** and **8b (harden)** to get a real URL early.
 
-#### 8a — Go live
-Sub-todos (tracked in SQL: `p8a-*`):
+#### 8a — Go live (in progress, blocked at deploy)
 
-- `p8a-github-push` — create private repo `muyangamigo/FinTracker`, push `main`, confirm `.env.local` is gitignored.
-- `p8a-entra-app` — register a real Entra app for Junjie + Jin You; capture tenant/client/secret; configure redirect URI for the deployed URL.
-- `p8a-app-service` — provision RG + App Service Plan (B1) + App Service (Linux Node 20) in Southeast Asia (closest to Neon `ap-southeast-1`). Configure `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `AZURE_AD_*`.
-- `p8a-deploy` — `.github/workflows/deploy.yml` for CI deploys; first-run via `az webapp deployment source` is acceptable. Verify Prisma client generates on host (postinstall + Next standalone build).
-- `p8a-smoke` — sign in as both household members; verify dashboard + imports list.
+- ✅ `p8a-github-push` — repo live at https://github.com/MuyangAmigo/FinTracker (private). All 11 commits authored as `Junjie Li <11220663+MuyangAmigo@users.noreply.github.com>` so they link to the MuyangAmigo profile. `.env.local` confirmed gitignored.
+- ✅ `p8a-app-service` — provisioned in subscription **Visual Studio Enterprise Subscription (a0adf30d-bf1c-4bff-9a92-b6d937d0154f)** under tenant `modsdevx.onmicrosoft.com`:
+  - RG: `fintracker-rg` (southeastasia)
+  - Plan: `fintracker-plan` (Linux, B1)
+  - Web App: `fintracker-jl` → https://fintracker-jl.azurewebsites.net
+  - Runtime: `NODE:22-lts` (Node 20 isn't offered on Linux App Service anymore)
+  - Startup command: `npm start`
+  - Health check: `/api/health`, always-on, https-only
+  - SCM basic auth re-enabled (was blocked by tenant policy → flipped via `az resource update`)
+  - App settings configured: `DATABASE_URL`, `AUTH_BYPASS=true`, `BASIC_AUTH_USER=household`, `BASIC_AUTH_PASSWORD=ZZl7kMsDKiFX2IWA`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET=UeXyErFWnQn6U3jQ/naMTandYBFJ88jPUXjbvIS/Qks=`, `HOUSEHOLD_NAME`, `NODE_ENV=production`, `SCM_DO_BUILD_DURING_DEPLOYMENT=false`, `HOSTNAME=0.0.0.0`
+  - Publish profile uploaded to GitHub repo secret `AZUREAPPSERVICE_PUBLISHPROFILE`
+- ⛔ `p8a-deploy` — **blocked**. GitHub Actions builds the Next.js standalone bundle correctly (verified locally — `node server.js` serves `/api/health` 200 and gates everything else behind Basic Auth) but `azure/webapps-deploy@v3` returns **HTTP 409 Conflict** from OneDeploy on every attempt. First deploy (~600MB push) succeeded but the container crashed after 230s trying to extract a 884MB `node_modules.tar.gz` Oryx had created from the shipped node_modules; switched to standalone output + wiped wwwroot, now OneDeploy itself won't accept the new package. Suspect a stuck deploy lock or that the prior failed deployment record needs to be cleared.
+- ⏸ `p8a-entra-app` — deferred; Basic Auth bypass is in place so two humans can use the site once it's serving.
+- ⏸ `p8a-smoke` — pending live URL.
+
+**Resume path for next session (in priority order):**
+1. Investigate the 409. Try `az webapp deploy --resource-group fintracker-rg --name fintracker-jl --src-path release.zip --type zip` from a local terminal to bypass GitHub Actions and see if the issue is in the action or in the App Service deployment endpoint. If that works, switch the workflow to use `azure/login` + `az webapp deploy` instead of `azure/webapps-deploy@v3`.
+2. If 409 persists: delete the stuck Kudu deployment via `DELETE /api/deployments/{id}` (there's a pending `temp-018` record), or re-create the Web App fresh.
+3. Once it deploys, hit `/api/health` (no creds) and `/` (with `household:ZZl7kMsDKiFX2IWA`) to confirm.
+4. Mark `p8a-deploy` and `p8a-smoke` done.
+
+**Local preview is fully working.** `pnpm dev` from the repo root, then http://localhost:3000 with `household:ZZl7kMsDKiFX2IWA`. `.env.local` has the bypass + basic auth env vars added.
 
 #### 8b — Harden
 Sub-todos (tracked in SQL: `p8b-*`):
