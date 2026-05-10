@@ -1,0 +1,557 @@
+// FinTracker — initial finance domain schema (Phase 3).
+//
+// Design principles:
+//   - Money is stored as integer minor units + ISO currency code, never floats.
+//   - Every finance row is scoped to a household; no global cross-tenant rows.
+//   - Transactions and account snapshots are separate concepts (cash flows vs.
+//     point-in-time balances).
+//   - Imports keep full lineage (source row, original label, mapping status)
+//     so we can reconcile against legacy spreadsheets and re-run idempotently.
+//   - Audit events live in this database; the `lib/auth/audit.ts` stdout sink
+//     becomes the secondary signal once persistence lands.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Identity & household scoping
+// -----------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  // Microsoft Entra subject (oid claim). Populated on first sign-in.
+  entraOid  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships          HouseholdMembership[]
+  authoredTransactions Transaction[]         @relation("TransactionAuthor")
+  ownedAccounts        Account[]             @relation("AccountOwner")
+  importsSubmitted     Import[]
+
+  @@map("users")
+}
+
+model Household {
+  id              String   @id @default(cuid())
+  name            String
+  // Default reporting currency (ISO 4217). All native-currency amounts are
+  // preserved on records; aggregates convert into this for display.
+  baseCurrency    String   @default("CNY")
+  // 0..1, e.g. 0.6 for the 60% household savings goal.
+  savingsGoalRate Decimal? @db.Decimal(5, 4)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members          HouseholdMembership[]
+  accounts         Account[]
+  categories       Category[]
+  categoryAliases  CategoryAlias[]
+  transactions     Transaction[]
+  accountSnapshots AccountSnapshot[]
+  budgets          Budget[]
+  investments      Investment[]
+  holdings         Holding[]
+  imports          Import[]
+  insightRuns      InsightRun[]
+  insights         Insight[]
+  auditEvents      AuditEvent[]
+
+  @@map("households")
+}
+
+enum HouseholdRole {
+  OWNER
+  MEMBER
+  VIEWER
+
+  @@map("household_role")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  REVOKED
+
+  @@map("membership_status")
+}
+
+model HouseholdMembership {
+  id          String           @id @default(cuid())
+  householdId String
+  userId      String
+  role        HouseholdRole    @default(MEMBER)
+  status      MembershipStatus @default(ACTIVE)
+  // Display label for this person within the household (e.g. "Junjie",
+  // "Jin You"). Imports use this when assigning ownership from spreadsheet
+  // labels like "Junjie" / "Jinyou".
+  displayName String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([householdId])
+  @@map("household_memberships")
+}
+
+// -----------------------------------------------------------------------------
+// Accounts & balances
+// -----------------------------------------------------------------------------
+
+enum AccountKind {
+  CASH
+  BANK
+  WALLET
+  CREDIT_CARD
+  BROKERAGE
+  ESPP
+  INSURANCE
+  INVESTMENT
+  LIABILITY
+  OTHER
+
+  @@map("account_kind")
+}
+
+model Account {
+  id          String      @id @default(cuid())
+  householdId String
+  ownerUserId String?
+  kind        AccountKind
+  // Display name e.g. "CMB · Junjie", "ESPP", "China Bank · Joint".
+  name        String
+  // Optional opaque external identifier (last 4 of card, account number tail).
+  externalRef String?
+  currency    String      @default("CNY")
+  archivedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  household       Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  owner           User?             @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  snapshots       AccountSnapshot[]
+  transactions    Transaction[]     @relation("TransactionAccount")
+  transfersFrom   Transaction[]     @relation("TransactionFromAccount")
+  transfersTo     Transaction[]     @relation("TransactionToAccount")
+  categoryAliases CategoryAlias[]
+
+  @@unique([householdId, name])
+  @@index([householdId, kind])
+  @@map("accounts")
+}
+
+model AccountSnapshot {
+  id           String   @id @default(cuid())
+  householdId  String
+  accountId    String
+  // Date of the balance reading (typically month-end).
+  asOf         DateTime @db.Date
+  // Balance in account's native currency, integer minor units.
+  balanceMinor BigInt
+  currency     String
+  note         String?
+  // Source file row hash for idempotent imports.
+  sourceHash   String?
+  importRowId  String?  @unique
+  createdAt    DateTime @default(now())
+
+  household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  importRow ImportRow? @relation(fields: [importRowId], references: [id], onDelete: SetNull)
+
+  @@unique([accountId, asOf])
+  @@index([householdId, asOf])
+  @@map("account_snapshots")
+}
+
+// -----------------------------------------------------------------------------
+// Categories & aliases (preserves legacy spreadsheet labels)
+// -----------------------------------------------------------------------------
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+  TRANSFER
+  INVESTMENT
+  ADJUSTMENT
+
+  @@map("category_kind")
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  householdId String
+  parentId    String?
+  kind        CategoryKind
+  // Canonical English display name.
+  name        String
+  // Optional Chinese display name (恋爱金, 玩乐金, …).
+  nameZh      String?
+  // Stable slug used for import mapping / config (e.g. "salary", "lifestyle").
+  slug        String
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  household    Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  parent       Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Category[]      @relation("CategoryHierarchy")
+  aliases      CategoryAlias[]
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([householdId, slug])
+  @@index([householdId, kind])
+  @@map("categories")
+}
+
+model CategoryAlias {
+  id          String   @id @default(cuid())
+  householdId String
+  categoryId  String?
+  // Optional account binding when an alias actually means "post to account X
+  // as a transfer" rather than a category mapping (legacy card-line lables).
+  accountId   String?
+  // Original spreadsheet label, exactly as it appears (preserves casing,
+  // punctuation, Chinese characters).
+  label       String
+  // Optional person scope for labels like "Salary - Junjie".
+  personScope String?
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  account   Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([householdId, label, personScope])
+  @@index([householdId])
+  @@map("category_aliases")
+}
+
+// -----------------------------------------------------------------------------
+// Transactions (income / expense / transfer / investment cash-flows)
+// -----------------------------------------------------------------------------
+
+enum TransactionKind {
+  INCOME
+  EXPENSE
+  TRANSFER
+  INVESTMENT_CONTRIBUTION
+  INVESTMENT_WITHDRAWAL
+  ADJUSTMENT
+
+  @@map("transaction_kind")
+}
+
+enum TransactionScope {
+  // Visible to all household members.
+  HOUSEHOLD
+  // Owned by a single member (still scoped to the household).
+  PERSONAL
+
+  @@map("transaction_scope")
+}
+
+model Transaction {
+  id            String           @id @default(cuid())
+  householdId   String
+  authorUserId  String?
+  categoryId    String?
+  // Primary account: source for expenses/withdrawals, destination for income.
+  accountId     String?
+  // For TRANSFER kind, both sides are populated.
+  fromAccountId String?
+  toAccountId   String?
+  kind          TransactionKind
+  scope         TransactionScope @default(HOUSEHOLD)
+  // Date of the economic event.
+  occurredOn    DateTime         @db.Date
+  // Native-currency amount, integer minor units, always positive.
+  amountMinor   BigInt
+  currency      String
+  payee         String?
+  note          String?
+  // Person tag for shared/personal split (e.g. "Junjie", "Jinyou", "Joint").
+  personTag     String?
+  // Source-file hash for idempotent imports.
+  sourceHash    String?
+  importRowId   String?          @unique
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  author      User?      @relation("TransactionAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  account     Account?   @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  fromAccount Account?   @relation("TransactionFromAccount", fields: [fromAccountId], references: [id], onDelete: SetNull)
+  toAccount   Account?   @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: SetNull)
+  importRow   ImportRow? @relation(fields: [importRowId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, occurredOn])
+  @@index([householdId, kind, occurredOn])
+  @@index([householdId, categoryId, occurredOn])
+  @@map("transactions")
+}
+
+// -----------------------------------------------------------------------------
+// Budgets
+// -----------------------------------------------------------------------------
+
+enum BudgetPeriod {
+  MONTHLY
+  ANNUAL
+
+  @@map("budget_period")
+}
+
+model Budget {
+  id          String       @id @default(cuid())
+  householdId String
+  categoryId  String?
+  // null categoryId means a household-level cap (e.g. total expenses).
+  period      BudgetPeriod
+  // Period start; e.g. 2026-01-01 for January 2026 monthly.
+  periodStart DateTime     @db.Date
+  amountMinor BigInt
+  currency    String       @default("CNY")
+  // Optional person scope ("Junjie" / "Jinyou" / null = whole household).
+  personTag   String?
+  note        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([householdId, categoryId, period, periodStart, personTag])
+  @@index([householdId, periodStart])
+  @@map("budgets")
+}
+
+// -----------------------------------------------------------------------------
+// Investments (positions and snapshots)
+// -----------------------------------------------------------------------------
+
+model Investment {
+  id          String   @id @default(cuid())
+  householdId String
+  // Display name e.g. "ESPP", "Stock - VOO", "Life Insurance".
+  name        String
+  // Free-form provider/broker.
+  provider    String?
+  currency    String   @default("CNY")
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  holdings  Holding[]
+
+  @@unique([householdId, name])
+  @@map("investments")
+}
+
+model Holding {
+  id             String   @id @default(cuid())
+  householdId    String
+  investmentId   String
+  asOf           DateTime @db.Date
+  // Market value in native currency, integer minor units.
+  valueMinor     BigInt
+  currency       String
+  // Optional unit count (shares/lots) for fidelity beyond bulk valuation.
+  units          Decimal? @db.Decimal(20, 8)
+  costBasisMinor BigInt?
+  note           String?
+  createdAt      DateTime @default(now())
+
+  household  Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  investment Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+
+  @@unique([investmentId, asOf])
+  @@index([householdId, asOf])
+  @@map("holdings")
+}
+
+// -----------------------------------------------------------------------------
+// Imports (CSV staging with full lineage)
+// -----------------------------------------------------------------------------
+
+enum ImportSourceFormat {
+  PERSONAL_OVERVIEW
+  HOUSEHOLD_MONTHLY
+  UNKNOWN
+
+  @@map("import_source_format")
+}
+
+enum ImportStatus {
+  UPLOADED
+  PARSED
+  REVIEWING
+  COMMITTED
+  FAILED
+
+  @@map("import_status")
+}
+
+model Import {
+  id            String             @id @default(cuid())
+  householdId   String
+  submittedById String?
+  format        ImportSourceFormat @default(UNKNOWN)
+  status        ImportStatus       @default(UPLOADED)
+  // Original filename as uploaded.
+  filename      String
+  // Pointer to the blob in Azure Blob Storage (container/path).
+  blobPath      String?
+  // Period covered (year-month range) once detected.
+  coversFrom    DateTime?          @db.Date
+  coversTo      DateTime?          @db.Date
+  errorMessage  String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  household   Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  submittedBy User?       @relation(fields: [submittedById], references: [id], onDelete: SetNull)
+  rows        ImportRow[]
+
+  @@index([householdId, createdAt])
+  @@map("imports")
+}
+
+enum ImportRowStatus {
+  PARSED
+  MAPPED
+  IGNORED
+  ERROR
+  COMMITTED
+
+  @@map("import_row_status")
+}
+
+model ImportRow {
+  id            String          @id @default(cuid())
+  importId      String
+  householdId   String
+  // Raw spreadsheet location for traceability.
+  sourceRow     Int
+  sourceColumn  String?
+  // Original label / column header from the CSV.
+  originalLabel String?
+  // Parsed value (string for flexibility — could be money, date, percent).
+  rawValue      String?
+  // Computed from sourceRow + originalLabel + rawValue. Used to dedupe.
+  rowHash       String
+  status        ImportRowStatus @default(PARSED)
+  errorMessage  String?
+  createdAt     DateTime        @default(now())
+
+  import          Import           @relation(fields: [importId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  accountSnapshot AccountSnapshot?
+
+  @@unique([importId, rowHash])
+  @@index([importId, status])
+  @@map("import_rows")
+}
+
+// -----------------------------------------------------------------------------
+// AI insights
+// -----------------------------------------------------------------------------
+
+enum InsightRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("insight_run_status")
+}
+
+model InsightRun {
+  id              String           @id @default(cuid())
+  householdId     String
+  // Period covered by this insight, e.g. 2026-05-01 (month) or 2026-01-01 (year).
+  periodStart     DateTime         @db.Date
+  periodEnd       DateTime         @db.Date
+  modelDeployment String
+  promptVersion   String
+  status          InsightRunStatus @default(PENDING)
+  // Aggregate metric snapshot fed to the model (JSON).
+  inputSnapshot   Json
+  errorMessage    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  insights  Insight[]
+
+  @@index([householdId, periodStart])
+  @@map("insight_runs")
+}
+
+enum InsightKind {
+  SUMMARY
+  ANOMALY
+  RECOMMENDATION
+  ANNUAL_REVIEW
+
+  @@map("insight_kind")
+}
+
+model Insight {
+  id           String      @id @default(cuid())
+  householdId  String
+  insightRunId String
+  kind         InsightKind
+  title        String
+  // Markdown body. Validation enforced at write time.
+  body         String
+  // Optional structured payload (e.g. cited metrics, deltas).
+  payload      Json?
+  // Optional thumbs-up/down feedback.
+  feedback     Int?        @default(0)
+  feedbackNote String?
+  createdAt    DateTime    @default(now())
+
+  household  Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  insightRun InsightRun @relation(fields: [insightRunId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("insights")
+}
+
+// -----------------------------------------------------------------------------
+// Audit events (mirrors lib/auth/audit.ts categories)
+// -----------------------------------------------------------------------------
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  householdId String?
+  // Actor's email (denormalized so events survive user deletion).
+  actorEmail  String?
+  type        String
+  resource    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, createdAt])
+  @@index([type, createdAt])
+  @@map("audit_events")
+}

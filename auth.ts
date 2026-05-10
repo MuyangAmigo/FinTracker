@@ -4,6 +4,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
 import { isHouseholdMember, householdRoleFor } from "@/lib/auth/allowlist";
 import { audit } from "@/lib/auth/audit";
+import { syncUserAndHousehold } from "@/lib/auth/household";
 
 /*
  * Auth.js v5 root configuration.
@@ -59,6 +60,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         audit({ type: "login_denied", actor: email, metadata: { reason: "not_in_allowlist" } });
         return false;
       }
+
+      // Best-effort persist: upsert User + Household + Membership. If the
+      // database is unreachable we still allow sign-in (stdout audit captures
+      // the failure) so a transient DB outage can't lock everyone out.
+      try {
+        await syncUserAndHousehold({
+          email,
+          name: user.name ?? profile?.name ?? null,
+          entraOid: (profile as { oid?: string } | null)?.oid ?? null,
+        });
+      } catch (err) {
+        console.warn(
+          JSON.stringify({
+            audit: true,
+            warn: "household_sync_failed",
+            actor: email,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
+
       audit({ type: "login", actor: email, metadata: { role: householdRoleFor(email) } });
       return true;
     },

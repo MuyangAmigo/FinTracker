@@ -1,9 +1,10 @@
 /*
  * Audit log scaffold.
  *
- * Phase 2: emits structured JSON to stdout. Application Insights ingests
- * stdout in Azure Container Apps so this is enough for an audit trail in
- * production. Phase 3 will move persistence to the `audit_events` table.
+ * Emits structured JSON to stdout (so Application Insights / Container Apps
+ * pick it up unconditionally) AND attempts a best-effort write to the
+ * `audit_events` table. The DB write is fire-and-forget — if Prisma is
+ * unreachable or throws, the auth/finance flow never breaks because of audit.
  *
  * Categories per plan.md security design:
  *   - login        — successful sign-in
@@ -15,6 +16,8 @@
  *   - admin.*      — household membership / settings change
  *   - insight      — AI insight generated
  */
+
+import { prisma } from "@/lib/db";
 
 export type AuditEventType =
   | "login"
@@ -42,4 +45,29 @@ export function audit(event: AuditEvent): void {
     ...event,
   };
   console.log(JSON.stringify(entry));
+
+  // Best-effort DB persist. Promise rejections are swallowed so a database
+  // outage cannot break sign-in or any mutation.
+  void persistAudit(event).catch((err) => {
+    console.warn(
+      JSON.stringify({
+        audit: true,
+        warn: "audit_persist_failed",
+        type: event.type,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  });
+}
+
+async function persistAudit(event: AuditEvent): Promise<void> {
+  await prisma.auditEvent.create({
+    data: {
+      type: event.type,
+      actorEmail: event.actor,
+      householdId: event.householdId ?? null,
+      resource: event.resource,
+      metadata: (event.metadata ?? null) as never,
+    },
+  });
 }
