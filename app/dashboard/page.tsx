@@ -1,23 +1,35 @@
 import Link from "next/link";
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PillTag } from "@/components/ui/pill-tag";
 import { Money } from "@/components/ui/money";
+import { signOut } from "@/auth";
+import { requireSession } from "@/lib/auth/session";
 
 /*
- * Dashboard placeholder. Per DESIGN.md the dashboard track flips polarity to
- * a dark-app shell (`bg-app-shell` from globals.css). Real data wiring comes
- * in Phase 5/6.
+ * Dashboard home. Per DESIGN.md the dashboard track flips polarity to a
+ * dark-app shell (`bg-app-shell` from globals.css). Real data wiring comes
+ * in Phase 5/6 — for now the placeholder KPIs and chart prove the design
+ * system. Auth is enforced via `requireSession()` plus the middleware.
  */
-export default function DashboardHome() {
+export default async function DashboardHome() {
+  const session = await requireSession();
+  const user = session.user;
+  const greetingName = user.name?.split(" ")[0] ?? user.email ?? "there";
+  const role = user.householdRole === "owner" ? "Owner" : "Member";
+
   return (
     <div className="bg-app-shell flex min-h-screen flex-1 text-on-primary">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-brand-dark-900/40 p-6 md:flex">
         <Link href="/" className="font-heading-sm flex items-center gap-2">
-          <span aria-hidden className="inline-block h-3 w-3 rounded-pill bg-primary-soft" />
+          <span
+            aria-hidden
+            className="inline-block h-3 w-3 rounded-pill bg-primary-soft"
+          />
           FinTracker
         </Link>
-        <nav className="mt-10 flex flex-col gap-2 font-body-md text-on-primary/70">
+        <nav className="mt-10 flex flex-1 flex-col gap-2 font-body-md text-on-primary/70">
           <DashNav href="/dashboard" label="Overview" active />
           <DashNav href="/dashboard/transactions" label="Transactions" />
           <DashNav href="/dashboard/accounts" label="Accounts" />
@@ -25,7 +37,29 @@ export default function DashboardHome() {
           <DashNav href="/dashboard/insights" label="Insights" />
           <DashNav href="/dashboard/imports" label="Imports" />
         </nav>
+        <div className="mt-6 border-t border-white/10 pt-4">
+          <p className="font-micro-cap text-on-primary/50">Signed in</p>
+          <p className="font-body-md mt-1 truncate text-on-primary">
+            {user.email}
+          </p>
+          <p className="font-micro mt-1 text-on-primary/60">{role}</p>
+          <form
+            className="mt-3"
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/" });
+            }}
+          >
+            <button
+              type="submit"
+              className="font-body-md text-on-primary/70 hover:text-on-primary"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </aside>
+
 
       <main className="flex-1 p-6 md:p-10">
         <div className="mx-auto max-w-5xl">
@@ -33,10 +67,11 @@ export default function DashboardHome() {
             <div>
               <PillTag>Household · May 2026</PillTag>
               <h1 className="font-display-lg mt-3 text-on-primary">
-                Welcome back.
+                Welcome back, {greetingName}.
               </h1>
               <p className="font-body-md mt-1 text-on-primary/70">
-                Phase 1 scaffold preview — real data wires up in later phases.
+                Real finance data lands in Phase 5/6. These cards are
+                placeholders so the design system can be reviewed end-to-end.
               </p>
             </div>
             <div className="flex gap-3">
