@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { getApiSession } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
 import { commitImport } from "@/lib/imports/stage";
 
@@ -10,7 +10,7 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
+  const session = await getApiSession();
   if (!session?.user?.email) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }

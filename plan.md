@@ -280,8 +280,8 @@ Guardrails:
 - Phase 2 — done (commit `41d15d1`)
 - Phase 3 — done (commits `a8c2bc3` schema/seed code, `0f3c137` Neon migration applied)
 - Phase 4 — done (commit `e7937db`); all 8 legacy CSVs import 0-error → 247 AccountSnapshot rows + 402 Transaction rows on Neon
-- Phase 5 — next
-- Phases 6-8 — pending
+- **Phase 8a — in progress (re-prioritized 2026-05-10): get the site live before building Phases 5–7 features**
+- Phases 5, 6, 7, 8b — pending (sub-todos captured in SQL `todos` table)
 
 ### Phase 3 outcome (recap)
 
@@ -389,24 +389,49 @@ Settled scope (priorities, in order):
 
 ### Phase 6: Dashboards and analysis
 
-- Build monthly household dashboard.
-- Build trend, net-worth, cash-flow, savings-rate, budget variance, and category analysis views.
-- Add filters by person, account, category, period, and shared/personal scope.
-- Add CSV/Excel-compatible export.
+Sub-todos (tracked in SQL: `p6-*`):
+
+- `p6-net-worth-chart` — stacked-area net-worth time series from AccountSnapshot.
+- `p6-cash-flow-chart` — monthly income vs expense bars + savings-rate line vs household goal.
+- `p6-category-breakdown` — donut/treemap by category, toggleable by personTag.
+- `p6-account-detail` — per-account drilldown with snapshot trend + transactions + computed-vs-snapshot variance hints.
+- `p6-export` — CSV / quarterly-PDF export.
+
+Add filters by person, account, category, period, and shared/personal scope.
 
 ### Phase 7: Azure AI insights
 
-- Build aggregate metric generators.
-- Add Azure model integration from backend only.
-- Implement structured insight generation, validation, storage, and display.
-- Add user feedback and prompt/model version tracking.
+Sub-todos (tracked in SQL: `p7-*`):
+
+- `p7-foundry-client` — `lib/ai/foundry.ts` wrapper, env-driven endpoint/key (or managed identity), health route.
+- `p7-monthly-summary` — month-end job that asks Foundry for a household summary; stores to a new `Insight` table; shows on dashboard.
+- `p7-anomaly-flags` — flag transactions > category baseline σ; show Foundry-generated explanation.
+- `p7-chat-ask` — conversational sidebar with RAG over Transaction + AccountSnapshot.
+
+Cross-cutting: aggregate metric generators, structured insight validation/storage, prompt/model version tracking, user feedback capture.
 
 ### Phase 8: Deployment and hardening
 
-- Add IaC for Azure resources.
-- Configure GitHub Actions deployment with OIDC.
-- Add backup, restore, observability, alerting, and cost monitoring.
-- Run security review, import validation, and end-to-end product checks.
+Split into **8a (go live)** and **8b (harden)** to get a real URL early.
+
+#### 8a — Go live
+Sub-todos (tracked in SQL: `p8a-*`):
+
+- `p8a-github-push` — create private repo `muyangamigo/FinTracker`, push `main`, confirm `.env.local` is gitignored.
+- `p8a-entra-app` — register a real Entra app for Junjie + Jin You; capture tenant/client/secret; configure redirect URI for the deployed URL.
+- `p8a-app-service` — provision RG + App Service Plan (B1) + App Service (Linux Node 20) in Southeast Asia (closest to Neon `ap-southeast-1`). Configure `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `AZURE_AD_*`.
+- `p8a-deploy` — `.github/workflows/deploy.yml` for CI deploys; first-run via `az webapp deployment source` is acceptable. Verify Prisma client generates on host (postinstall + Next standalone build).
+- `p8a-smoke` — sign in as both household members; verify dashboard + imports list.
+
+#### 8b — Harden
+Sub-todos (tracked in SQL: `p8b-*`):
+
+- `p8b-blob-attachments` — Storage Account + managed identity + signed-URL upload endpoint for receipts.
+- `p8b-keyvault` — move secrets to Key Vault, switch App Service to Key Vault references.
+- `p8b-monitoring` — App Insights via `@azure/monitor-opentelemetry`, dashboards, 5xx + Prisma-timeout alerts.
+- `p8b-custom-domain` — bind a domain (or stay on `.azurewebsites.net`); auto-managed TLS cert.
+
+Cross-cutting: IaC (Bicep) for everything in 8a/8b once shape is settled; backup/restore + cost monitoring; full security review.
 
 ## Testing and validation plan
 

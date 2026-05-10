@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
+import { getApiSession } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
 import { detectImportFormat } from "@/lib/imports/format-detect";
 import { parseHouseholdMonthly } from "@/lib/imports/parsers/household-monthly";
@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const session = await auth();
+  const session = await getApiSession();
   if (!session?.user?.email) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }

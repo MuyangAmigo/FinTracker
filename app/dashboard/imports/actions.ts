@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import { getApiSession } from "@/lib/auth/session";
 import { audit } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { detectImportFormat } from "@/lib/imports/format-detect";
@@ -18,7 +18,7 @@ export async function uploadCsvAction(
   _prev: UploadResult | null,
   formData: FormData,
 ): Promise<UploadResult> {
-  const session = await auth();
+  const session = await getApiSession();
   if (!session?.user?.email) return { ok: false, error: "unauthenticated" };
 
   const file = formData.get("file");
@@ -65,7 +65,7 @@ export async function uploadCsvAction(
 }
 
 export async function commitImportAction(formData: FormData): Promise<void> {
-  const session = await auth();
+  const session = await getApiSession();
   if (!session?.user?.email) return;
   const id = String(formData.get("importId") ?? "");
   if (!id) return;
