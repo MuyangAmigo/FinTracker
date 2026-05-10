@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 
@@ -103,7 +103,7 @@ const CATEGORIES: CategorySeed[] = [
   { slug: "insurance-premium", name: "Insurance premium", kind: "INVESTMENT" },
 ];
 
-async function seedCategories(client: Prisma.TransactionClient) {
+async function seedCategories(client: PrismaClient | Prisma.TransactionClient) {
   for (const seed of CATEGORIES) {
     const category = await client.category.upsert({
       where: {
@@ -154,7 +154,7 @@ async function seedCategories(client: Prisma.TransactionClient) {
   }
 }
 
-async function seedHousehold(client: Prisma.TransactionClient) {
+async function seedHousehold(client: PrismaClient | Prisma.TransactionClient) {
   await client.household.upsert({
     where: { id: HOUSEHOLD_ID },
     create: {
@@ -167,7 +167,7 @@ async function seedHousehold(client: Prisma.TransactionClient) {
   });
 }
 
-async function seedAccounts(client: Prisma.TransactionClient) {
+async function seedAccounts(client: PrismaClient | Prisma.TransactionClient) {
   // Account names mirror the columns observed in the personal-overview CSVs.
   // Owner association happens later when a real user is linked.
   const accounts = [
@@ -202,11 +202,11 @@ async function seedAccounts(client: Prisma.TransactionClient) {
 }
 
 async function main() {
-  await prisma.$transaction(async (tx) => {
-    await seedHousehold(tx);
-    await seedCategories(tx);
-    await seedAccounts(tx);
-  });
+  // Each phase is idempotent, so we don't need a single wrapping transaction.
+  // Doing so would exceed Prisma's default 5 s window on a remote DB like Neon.
+  await seedHousehold(prisma);
+  await seedCategories(prisma);
+  await seedAccounts(prisma);
   console.log("✔ Seed complete");
 }
 
