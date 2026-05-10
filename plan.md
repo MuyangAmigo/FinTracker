@@ -330,9 +330,62 @@ Guardrails:
 
 ### Phase 5: Manual tracking experience
 
-- Build transaction entry, account snapshot entry, budget management, and investment snapshot forms.
-- Add recurring record templates.
-- Add edit history/audit surfaces for changed records.
+Settled scope (priorities, in order):
+
+1. **Quick-entry transaction form** — primary surface for Phase 5.
+   - Required fields: date, amount, currency, category, account, kind
+     (`INCOME`/`EXPENSE`/`TRANSFER`), payer (`personTag`: Junjie / Jin You /
+     Household), and notes.
+   - Two-sided transfer support from day one: a `TRANSFER` entry takes a
+     "from account" + "to account" and creates a paired ledger entry so
+     net-worth math reconciles with Excel.
+   - Optional fields visible behind a toggle: merchant/payee, attachment
+     (Phase 5 stub only; Blob upload comes in Phase 8).
+   - Surface this form prominently on `/dashboard` (collapsible card at the
+     top of the month view) and as a standalone `/dashboard/transactions/new`.
+   - Server action + zod validation reusing `lib/validation/finance.ts`.
+   - Audit on every create/edit/delete via `audit({ type: "transaction", … })`.
+
+2. **Account snapshot entry** — the monthly net-worth ritual.
+   - `/dashboard/snapshots` page: one row per account with month-end balance
+     entry, optimistic update, "save all" button.
+   - Pre-filled with last-known balance for each account.
+   - Same `personTag` + notes optional metadata.
+
+3. **Budget management** — start with category-level monthly budgets and
+   the 60% savings goal.
+   - `/dashboard/budgets` page: add/edit budget rows by (category, period),
+     show progress bars vs. live transaction totals for the active month.
+   - Household-level savings rate goal stored on `households.savingsGoalRate`
+     (already seeded at 0.6).
+
+4. **Recurring templates** — out of scope for Phase 5 unless requested.
+   Capture as a backlog item; revisit before Phase 6.
+
+5. **Edit history / audit** — `/dashboard/audit` simple chronological list
+   of recent `audit_events` for the household. Filter by type.
+
+#### Design decisions captured
+
+- Transfers create exactly one `Transaction` row of `kind=TRANSFER` with both
+  `accountId` (from) and a new `counterpartyAccountId` (to) field, OR two
+  paired rows linked by `transferGroupId`. **Decision deferred** to
+  implementation start — schema has neither today; whichever is simpler in
+  Prisma wins.
+- All entries default to today's date and the household's base currency (CNY).
+- The form re-uses the same `Transaction` model the importer writes to, so
+  imported and manual rows are queryable through the same surface.
+
+#### Open Phase-5 questions
+
+- For transfers: single row with a counterparty pointer, or two paired rows?
+  Two rows is more robust for per-account balance reconciliation but doubles
+  insert volume. Lean: paired rows linked by `transferGroupId`.
+- Should "payer" (`personTag`) default per session (e.g., Junjie's session →
+  payer=Junjie) or always be an explicit choice? Lean: default to current
+  user but show clearly + remember last-used.
+- Does Jin You sign in with the same Entra tenant or a guest account? This
+  blocks real multi-user testing. Carry forward to Phase 8 setup.
 
 ### Phase 6: Dashboards and analysis
 
