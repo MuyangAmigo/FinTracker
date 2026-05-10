@@ -1,0 +1,67 @@
+name: Build and deploy to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "22.x"
+  AZURE_WEBAPP_NAME: fintracker-jl
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          # The build pulls in @prisma/client which needs DATABASE_URL to be
+          # *defined* (not necessarily reachable) so build doesn't crash on
+          # the schema check. We pass the real one as a runtime env on the
+          # App Service side, not during the GitHub-hosted build.
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          NEXTAUTH_URL: https://fintracker-jl.azurewebsites.net
+          NEXTAUTH_SECRET: build-time-placeholder-replaced-at-runtime
+
+      - name: Package artifact
+        run: |
+          zip -r release.zip . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "tests/*" \
+            -x "**/*.test.ts" \
+            -x "**/*.test.tsx" \
+            -x ".next/cache/*" \
+            -x "assets/*" \
+            -x "session-state/*" \
+            -x ".env*" \
+            -x "DESIGN.md" \
+            -x "plan.md" \
+            -x "README.md"
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          package: release.zip
