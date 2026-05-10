@@ -20,20 +20,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: pnpm exec prisma generate
 
       - name: Build Next.js
-        run: npm run build
+        run: pnpm run build
         env:
           # The build pulls in @prisma/client which needs DATABASE_URL to be
           # *defined* (not necessarily reachable) so build doesn't crash on
