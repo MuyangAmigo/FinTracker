@@ -82,5 +82,7 @@ jobs:
           # node_modules.tar.gz, stale source trees) can't accumulate.
           clean: true
           restart: true
-          # Bypass Oryx auto-detection by running server.js directly.
-          startup-command: "node server.js"
+          # Note: the startup command (`node server.js`) is set directly on
+          # the App Service via `az webapp config set --startup-file` and
+          # persists across deploys. The `startup-command` input of this
+          # action only works with Azure-login auth, not publish-profile.
