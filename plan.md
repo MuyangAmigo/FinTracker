@@ -414,7 +414,7 @@ Cross-cutting: aggregate metric generators, structured insight validation/storag
 
 Split into **8a (go live)** and **8b (harden)** to get a real URL early.
 
-#### 8a — Go live (in progress, blocked at deploy)
+#### 8a — Go live (done)
 
 - ✅ `p8a-github-push` — repo live at https://github.com/MuyangAmigo/FinTracker (private). All 11 commits authored as `Junjie Li <11220663+MuyangAmigo@users.noreply.github.com>` so they link to the MuyangAmigo profile. `.env.local` confirmed gitignored.
 - ✅ `p8a-app-service` — provisioned in subscription **Visual Studio Enterprise Subscription (a0adf30d-bf1c-4bff-9a92-b6d937d0154f)** under tenant `modsdevx.onmicrosoft.com`:
@@ -422,20 +422,17 @@ Split into **8a (go live)** and **8b (harden)** to get a real URL early.
   - Plan: `fintracker-plan` (Linux, B1)
   - Web App: `fintracker-jl` → https://fintracker-jl.azurewebsites.net
   - Runtime: `NODE:22-lts` (Node 20 isn't offered on Linux App Service anymore)
-  - Startup command: `npm start`
+  - Startup command: `node server.js` (set via `az webapp config set --startup-file`; runs the Next.js standalone server directly and bypasses Oryx auto-detection)
   - Health check: `/api/health`, always-on, https-only
   - SCM basic auth re-enabled (was blocked by tenant policy → flipped via `az resource update`)
-  - App settings configured: `DATABASE_URL`, `AUTH_BYPASS=true`, `BASIC_AUTH_USER=household`, `BASIC_AUTH_PASSWORD=ZZl7kMsDKiFX2IWA`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET=UeXyErFWnQn6U3jQ/naMTandYBFJ88jPUXjbvIS/Qks=`, `HOUSEHOLD_NAME`, `NODE_ENV=production`, `SCM_DO_BUILD_DURING_DEPLOYMENT=false`, `HOSTNAME=0.0.0.0`
+  - App settings configured: `DATABASE_URL`, `AUTH_BYPASS=true`, `BASIC_AUTH_USER=household`, `BASIC_AUTH_PASSWORD=ZZl7kMsDKiFX2IWA`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET=UeXyErFWnQn6U3jQ/naMTandYBFJ88jPUXjbvIS/Qks=`, `HOUSEHOLD_NAME`, `NODE_ENV=production`, `SCM_DO_BUILD_DURING_DEPLOYMENT=false`, `ENABLE_ORYX_BUILD=false`, `HOSTNAME=0.0.0.0`
   - Publish profile uploaded to GitHub repo secret `AZUREAPPSERVICE_PUBLISHPROFILE`
-- ⛔ `p8a-deploy` — **blocked**. GitHub Actions builds the Next.js standalone bundle correctly (verified locally — `node server.js` serves `/api/health` 200 and gates everything else behind Basic Auth) but `azure/webapps-deploy@v3` returns **HTTP 409 Conflict** from OneDeploy on every attempt. First deploy (~600MB push) succeeded but the container crashed after 230s trying to extract a 884MB `node_modules.tar.gz` Oryx had created from the shipped node_modules; switched to standalone output + wiped wwwroot, now OneDeploy itself won't accept the new package. Suspect a stuck deploy lock or that the prior failed deployment record needs to be cleared.
-- ⏸ `p8a-entra-app` — deferred; Basic Auth bypass is in place so two humans can use the site once it's serving.
-- ⏸ `p8a-smoke` — pending live URL.
-
-**Resume path for next session (in priority order):**
-1. Investigate the 409. Try `az webapp deploy --resource-group fintracker-rg --name fintracker-jl --src-path release.zip --type zip` from a local terminal to bypass GitHub Actions and see if the issue is in the action or in the App Service deployment endpoint. If that works, switch the workflow to use `azure/login` + `az webapp deploy` instead of `azure/webapps-deploy@v3`.
-2. If 409 persists: delete the stuck Kudu deployment via `DELETE /api/deployments/{id}` (there's a pending `temp-018` record), or re-create the Web App fresh.
-3. Once it deploys, hit `/api/health` (no creds) and `/` (with `household:ZZl7kMsDKiFX2IWA`) to confirm.
-4. Mark `p8a-deploy` and `p8a-smoke` done.
+- ✅ `p8a-deploy` — live at https://fintracker-jl.azurewebsites.net. Two failures preceded the working deploy:
+  1. **First deploy** shipped pnpm's symlinked `node_modules`. Kudu repacked it into a 884 MB `node_modules.tar.gz`; Oryx's runtime wrapper extracted that to `/node_modules`, but pnpm's `.pnpm/` layout doesn't survive tar+extract: `next` ended up at `/node_modules/next/` while its transitive deps (e.g. `@swc/helpers`) stayed buried in `.pnpm/`, so the container crashed with `Cannot find module '@swc/helpers/_/_interop_require_default'`.
+  2. **Second deploy** still failed identically because Kudu left an `oryx-manifest.toml` + `node_modules.tar.gz` from the first deploy in wwwroot (OneDeploy `--type zip` doesn't purge by default), which kept re-triggering the broken startup wrapper.
+  3. **Fix that worked**: (a) install pnpm with `--config.node-linker=hoisted` so the standalone bundle ships a flat, npm-style `node_modules` that Kudu can repack without losing transitive resolution; (b) set `ENABLE_ORYX_BUILD=false` to stop Oryx from rebuilding at runtime; (c) set the startup command to `node server.js` on the App Service so Oryx skips auto-detection; (d) pass `clean: true` to `azure/webapps-deploy@v3` so each deploy wipes wwwroot first. Encoded in `.github/workflows/deploy.yml` so future deploys stay clean.
+- ⏸ `p8a-entra-app` — deferred; Basic Auth bypass is in place so two humans can use the site.
+- ✅ `p8a-smoke` — `/api/health` → `{"status":"ok","db":"ok"}`; `/` with `household:ZZl7kMsDKiFX2IWA` returns the full HTML page (27 KB).
 
 **Local preview is fully working.** `pnpm dev` from the repo root, then http://localhost:3000 with `household:ZZl7kMsDKiFX2IWA`. `.env.local` has the bypass + basic auth env vars added.
 
