@@ -7,12 +7,12 @@ import { Money } from "@/components/ui/money";
 import { PillTag } from "@/components/ui/pill-tag";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
+import { CURRENT_HOUSEHOLD_ID } from "@/lib/auth/household";
 
 import { commitImportAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-const HOUSEHOLD_ID = "junyou-household";
 const PREVIEW_ROW_LIMIT = 100;
 
 interface ParsedRowPayload {
@@ -40,7 +40,7 @@ export default async function ImportReviewPage({
   const justCommitted = sp.committed === "1";
 
   const imp = await prisma.import.findFirst({
-    where: { id, householdId: HOUSEHOLD_ID },
+    where: { id, householdId: CURRENT_HOUSEHOLD_ID },
     include: {
       _count: { select: { rows: true } },
       rows: {

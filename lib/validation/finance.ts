@@ -83,6 +83,48 @@ export const createTransactionSchema = z
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 
+/**
+ * Update variant — same shape but every field is optional except `id`. We
+ * apply the same TRANSFER / non-TRANSFER invariant. Callers should merge
+ * the parsed result onto the existing row before persisting.
+ */
+export const updateTransactionSchema = z
+  .object({
+    id: z.string().cuid(),
+    kind: transactionKindSchema.optional(),
+    scope: transactionScopeSchema.optional(),
+    occurredOn: isoDate.optional(),
+    money: moneyInputSchema.optional(),
+    categoryId: z.string().cuid().nullable().optional(),
+    accountId: z.string().cuid().nullable().optional(),
+    fromAccountId: z.string().cuid().nullable().optional(),
+    toAccountId: z.string().cuid().nullable().optional(),
+    payee: z.string().max(200).nullable().optional(),
+    note: z.string().max(2000).nullable().optional(),
+    personTag: z.string().max(64).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === "TRANSFER") {
+      if (!value.fromAccountId || !value.toAccountId) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Transfers require both fromAccountId and toAccountId",
+        });
+      }
+      if (
+        value.fromAccountId &&
+        value.fromAccountId === value.toAccountId
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Transfer source and destination must differ",
+        });
+      }
+    }
+  });
+
+export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
+
 export const accountKindSchema = z.enum([
   "CASH",
   "BANK",

@@ -1,168 +1,216 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { PillTag } from "@/components/ui/pill-tag";
 import { Money } from "@/components/ui/money";
-import { signOut } from "@/auth";
+import { PillTag } from "@/components/ui/pill-tag";
+import { QuickEntryCard } from "@/components/finance/quick-entry-card";
+import { CURRENT_HOUSEHOLD_ID } from "@/lib/auth/household";
 import { requireSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import {
+  monthlyIncomeExpenseSavings,
+  type TxnRow,
+} from "@/lib/finance/aggregates";
+import {
+  currentMonthRange,
+  formatMonthLabel,
+} from "@/lib/finance/period";
+
+import {
+  createTransactionAction,
+  readLastPersonTag,
+} from "./transactions/actions";
+import {
+  loadAccountOptions,
+  loadCategoryOptions,
+  loadHouseholdCurrency,
+} from "@/lib/finance/reference-data";
+
+export const dynamic = "force-dynamic";
 
 /*
- * Dashboard home. Per DESIGN.md the dashboard track flips polarity to a
- * dark-app shell (`bg-app-shell` from globals.css). Real data wiring comes
- * in Phase 5/6 — for now the placeholder KPIs and chart prove the design
- * system. Auth is enforced via `requireSession()` plus the middleware.
+ * Dashboard overview, Phase-5 edition.
+ *
+ * The sidebar lives in app/dashboard/layout.tsx now; this file owns only the
+ * <main> column. KPIs are wired to real transactions for the current calendar
+ * month via lib/finance/aggregates.ts. The net-worth chart remains a labelled
+ * placeholder until Phase 6 lands snapshot-driven aggregation.
  */
+
 export default async function DashboardHome() {
   const session = await requireSession();
   const user = session.user;
   const greetingName = user.name?.split(" ")[0] ?? user.email ?? "there";
-  const role = user.householdRole === "owner" ? "Owner" : "Member";
+
+  const range = currentMonthRange();
+  const monthLabel = formatMonthLabel(range);
+
+  const [household, txns, accounts, categories, lastPersonTag, currency] =
+    await Promise.all([
+      prisma.household.findUnique({
+        where: { id: CURRENT_HOUSEHOLD_ID },
+        select: { baseCurrency: true, savingsGoalRate: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          householdId: CURRENT_HOUSEHOLD_ID,
+          occurredOn: { gte: range.start, lt: range.nextStart },
+        },
+        select: {
+          kind: true,
+          amountMinor: true,
+          currency: true,
+          categoryId: true,
+          personTag: true,
+        },
+      }),
+      loadAccountOptions(),
+      loadCategoryOptions(),
+      readLastPersonTag(),
+      loadHouseholdCurrency(),
+    ]);
+
+  const baseCurrency = household?.baseCurrency ?? "CNY";
+  const totals = monthlyIncomeExpenseSavings(txns as TxnRow[], baseCurrency);
+  const goalFraction = household?.savingsGoalRate
+    ? Number(household.savingsGoalRate)
+    : 0.6;
+  const actualRate = totals.savingsRate;
+  const onTrack =
+    actualRate !== null ? actualRate >= goalFraction : null;
 
   return (
-    <div className="bg-app-shell flex min-h-screen flex-1 text-on-primary">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-brand-dark-900/40 p-6 md:flex">
-        <Link href="/" className="font-heading-sm flex items-center gap-2">
-          <span
-            aria-hidden
-            className="inline-block h-3 w-3 rounded-pill bg-primary-soft"
+    <main className="flex-1 p-6 md:p-10">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <PillTag>Household · {monthLabel}</PillTag>
+            <h1 className="font-display-lg mt-3 text-on-primary">
+              Welcome back, {greetingName}.
+            </h1>
+            <p className="font-body-md mt-1 text-on-primary/70">
+              {txns.length === 0
+                ? "Nothing recorded yet for this month — capture your first transaction."
+                : `${txns.length} transaction${txns.length === 1 ? "" : "s"} recorded so far this month.`}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Link
+              href="/dashboard/transactions/new"
+              className="rounded-pill bg-brand-dark-900 px-4 py-2 font-button-md text-on-primary hover:bg-ink-secondary"
+            >
+              Add transaction
+            </Link>
+            <Link
+              href="/dashboard/snapshots"
+              className="rounded-pill border border-white/20 bg-canvas/10 px-4 py-2 font-button-md text-on-primary hover:bg-white/10"
+            >
+              Log balances
+            </Link>
+          </div>
+        </header>
+
+        <section className="mb-8">
+          <QuickEntryCard
+            action={createTransactionAction}
+            accounts={accounts}
+            categories={categories}
+            defaultPersonTag={lastPersonTag}
+            defaultCurrency={currency}
           />
-          FinTracker
-        </Link>
-        <nav className="mt-10 flex flex-1 flex-col gap-2 font-body-md text-on-primary/70">
-          <DashNav href="/dashboard" label="Overview" active />
-          <DashNav href="/dashboard/transactions" label="Transactions" />
-          <DashNav href="/dashboard/accounts" label="Accounts" />
-          <DashNav href="/dashboard/budgets" label="Budgets" />
-          <DashNav href="/dashboard/insights" label="Insights" />
-          <DashNav href="/dashboard/imports" label="Imports" />
-        </nav>
-        <div className="mt-6 border-t border-white/10 pt-4">
-          <p className="font-micro-cap text-on-primary/50">Signed in</p>
-          <p className="font-body-md mt-1 truncate text-on-primary">
-            {user.email}
-          </p>
-          <p className="font-micro mt-1 text-on-primary/60">{role}</p>
-          <form
-            className="mt-3"
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/" });
-            }}
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          <KpiCard label="Income" value={totals.income} />
+          <KpiCard label="Expenses" value={totals.expense} tone="negative" />
+          <KpiCard
+            label="Savings"
+            value={totals.savings}
+            accent
+            footnote={
+              actualRate !== null
+                ? `${(actualRate * 100).toFixed(1)}% · goal ${(goalFraction * 100).toFixed(0)}%`
+                : "No income recorded yet"
+            }
+            footnoteTone={
+              onTrack === null
+                ? "neutral"
+                : onTrack
+                  ? "positive"
+                  : "negative"
+            }
+          />
+        </section>
+
+        <section className="mt-10 grid gap-4 lg:grid-cols-3">
+          <Card
+            variant="dashboardMockup"
+            padding="md"
+            className="bg-brand-dark-900/60 text-on-primary lg:col-span-2"
           >
-            <button
-              type="submit"
-              className="font-body-md text-on-primary/70 hover:text-on-primary"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </aside>
-
-
-      <main className="flex-1 p-6 md:p-10">
-        <div className="mx-auto max-w-5xl">
-          <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <PillTag>Household · May 2026</PillTag>
-              <h1 className="font-display-lg mt-3 text-on-primary">
-                Welcome back, {greetingName}.
-              </h1>
-              <p className="font-body-md mt-1 text-on-primary/70">
-                Real finance data lands in Phase 5/6. These cards are
-                placeholders so the design system can be reviewed end-to-end.
-              </p>
+            <p className="font-micro-cap mb-3 text-on-primary/60">
+              Net-worth trend (Phase 6 placeholder)
+            </p>
+            <div className="font-body-tabular flex h-48 items-end gap-1">
+              {[24, 28, 31, 30, 33, 35, 38, 42, 45, 47, 51, 55].map((h, i) => (
+                <div
+                  key={i}
+                  className="flex-1 rounded-t-md bg-primary-soft/80"
+                  style={{ height: `${h * 1.6}%` }}
+                />
+              ))}
             </div>
-            <div className="flex gap-3">
-              <Button variant="onDark">Add transaction</Button>
-              <Button
-                variant="secondary"
-                className="border-white/20 bg-canvas/10 text-on-primary hover:bg-white/10"
-              >
-                Run insight
-              </Button>
-            </div>
-          </header>
+            <p className="font-body-md mt-3 text-on-primary/60">
+              Wire up to monthly snapshots in Phase 6.
+            </p>
+          </Card>
 
-          <section className="grid gap-4 md:grid-cols-3">
-            <KpiCard
-              label="Income"
-              value={{ amountMinor: 9_876_500, currency: "CNY" }}
-            />
-            <KpiCard
-              label="Expenses"
-              value={{ amountMinor: 3_241_900, currency: "CNY" }}
-            />
-            <KpiCard
-              label="Savings"
-              value={{ amountMinor: 6_634_600, currency: "CNY" }}
-              accent
-            />
-          </section>
-
-          <section className="mt-10 grid gap-4 lg:grid-cols-3">
-            <Card
-              variant="dashboardMockup"
-              padding="md"
-              className="bg-brand-dark-900/60 text-on-primary lg:col-span-2"
-            >
-              <p className="font-micro-cap mb-3 text-on-primary/60">
-                Net-worth trend (placeholder)
-              </p>
-              <div className="font-body-tabular flex h-48 items-end gap-1">
-                {[24, 28, 31, 30, 33, 35, 38, 42, 45, 47, 51, 55].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-md bg-primary-soft/80"
-                    style={{ height: `${h * 1.6}%` }}
-                  />
-                ))}
-              </div>
-            </Card>
-
-            <Card
-              variant="dashboardMockup"
-              padding="md"
-              className="bg-brand-dark-900/60 text-on-primary"
-            >
-              <p className="font-micro-cap mb-3 text-on-primary/60">
-                Latest insight
-              </p>
-              <p className="font-heading-md text-on-primary">
-                Savings rate is 67% — three points above goal.
-              </p>
-              <p className="font-body-md mt-3 text-on-primary/70">
-                Generated by your Azure Foundry model deployment.
-              </p>
-            </Card>
-          </section>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function DashNav({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        active
-          ? "rounded-md bg-white/10 px-3 py-2 text-on-primary"
-          : "rounded-md px-3 py-2 hover:bg-white/5 hover:text-on-primary"
-      }
-    >
-      {label}
-    </Link>
+          <Card
+            variant="dashboardMockup"
+            padding="md"
+            className="bg-brand-dark-900/60 text-on-primary"
+          >
+            <p className="font-micro-cap mb-3 text-on-primary/60">
+              Quick links
+            </p>
+            <ul className="font-body-md space-y-2">
+              <li>
+                <Link
+                  href="/dashboard/transactions"
+                  className="text-primary-soft hover:underline"
+                >
+                  View all transactions →
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/budgets"
+                  className="text-primary-soft hover:underline"
+                >
+                  Manage budgets →
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/snapshots"
+                  className="text-primary-soft hover:underline"
+                >
+                  Record month-end balances →
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/audit"
+                  className="text-primary-soft hover:underline"
+                >
+                  Audit activity →
+                </Link>
+              </li>
+            </ul>
+          </Card>
+        </section>
+      </div>
+    </main>
   );
 }
 
@@ -170,10 +218,16 @@ function KpiCard({
   label,
   value,
   accent,
+  tone,
+  footnote,
+  footnoteTone,
 }: {
   label: string;
   value: { amountMinor: number; currency: string };
   accent?: boolean;
+  tone?: "positive" | "negative" | "neutral";
+  footnote?: string;
+  footnoteTone?: "positive" | "negative" | "neutral";
 }) {
   return (
     <Card
@@ -186,7 +240,24 @@ function KpiCard({
       }
     >
       <p className="font-micro-cap text-on-primary/70">{label}</p>
-      <Money className="font-display-md mt-2 text-on-primary" value={value} />
+      <Money
+        className="font-display-md mt-2 text-on-primary"
+        value={value}
+        tone={tone}
+      />
+      {footnote ? (
+        <p
+          className={
+            footnoteTone === "negative"
+              ? "font-body-md mt-2 text-ruby"
+              : footnoteTone === "positive"
+                ? "font-body-md mt-2 text-primary-soft"
+                : "font-body-md mt-2 text-on-primary/70"
+          }
+        >
+          {footnote}
+        </p>
+      ) : null}
     </Card>
   );
 }

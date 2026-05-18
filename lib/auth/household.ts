@@ -14,7 +14,16 @@ import { householdRoleFor } from "@/lib/auth/allowlist";
  * directly; until then this keeps zero-config bootstrapping working.
  */
 
-const HOUSEHOLD_ID = "junyou-household";
+/**
+ * Canonical household ID for the single-household deployment.
+ *
+ * Phase 5 promoted this from inline string literals in three places. When
+ * multi-household lands (Phase 8+), this constant goes away in favour of a
+ * per-request household lookup from the user's membership.
+ */
+export const CURRENT_HOUSEHOLD_ID = "junyou-household";
+
+const HOUSEHOLD_ID = CURRENT_HOUSEHOLD_ID;
 const HOUSEHOLD_NAME = process.env.HOUSEHOLD_NAME ?? "Household";
 
 export async function syncUserAndHousehold(input: {

@@ -24,6 +24,7 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { CURRENT_HOUSEHOLD_ID } from "@/lib/auth/household";
 import type {
   ImportFormat,
   ParsedAccountSnapshot,
@@ -32,7 +33,7 @@ import type {
   ParsedTransaction,
 } from "@/lib/imports/types";
 
-const HOUSEHOLD_ID = "junyou-household";
+const HOUSEHOLD_ID = CURRENT_HOUSEHOLD_ID;
 
 function hashRecord(record: ParsedRecord): string {
   const seed =

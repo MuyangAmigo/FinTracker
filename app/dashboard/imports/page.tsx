@@ -4,18 +4,17 @@ import { Card } from "@/components/ui/card";
 import { PillTag } from "@/components/ui/pill-tag";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
+import { CURRENT_HOUSEHOLD_ID } from "@/lib/auth/household";
 
 import { UploadForm } from "./upload-form";
 
 export const dynamic = "force-dynamic";
 
-const HOUSEHOLD_ID = "junyou-household";
-
 export default async function ImportsIndexPage() {
   await requireSession();
 
   const imports = await prisma.import.findMany({
-    where: { householdId: HOUSEHOLD_ID },
+    where: { householdId: CURRENT_HOUSEHOLD_ID },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: { _count: { select: { rows: true } } },
