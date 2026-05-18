@@ -32,7 +32,12 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # `node-linker=hoisted` flattens node_modules into the npm-style
+        # layout. The pnpm-default symlink layout doesn't survive Kudu's
+        # tar+extract repack on Linux App Service, leading to
+        # `Cannot find module '@swc/helpers/_/_interop_require_default'`
+        # at runtime when Next loads from `/node_modules/next/`.
+        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
@@ -72,3 +77,10 @@ jobs:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
           package: release.zip
+          # `clean: true` purges /home/site/wwwroot before extracting the
+          # new package, so previous-deploy artifacts (oryx-manifest.toml,
+          # node_modules.tar.gz, stale source trees) can't accumulate.
+          clean: true
+          restart: true
+          # Bypass Oryx auto-detection by running server.js directly.
+          startup-command: "node server.js"
