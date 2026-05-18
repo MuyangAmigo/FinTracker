@@ -328,64 +328,62 @@ Guardrails:
 - Validate totals and expose import errors.
 - Commit approved staged rows into canonical tables.
 
-### Phase 5: Manual tracking experience
+### Phase 5: Manual tracking experience ✓ DONE
 
-Settled scope (priorities, in order):
+**Status:** Shipped on branch `muyangamigo/phase-5-manual-tracking` (commit
+`878ce70`). `pnpm lint` / `pnpm test` (48 tests) / `pnpm build` all clean.
 
-1. **Quick-entry transaction form** — primary surface for Phase 5.
-   - Required fields: date, amount, currency, category, account, kind
-     (`INCOME`/`EXPENSE`/`TRANSFER`), payer (`personTag`: Junjie / Jin You /
-     Household), and notes.
-   - Two-sided transfer support from day one: a `TRANSFER` entry takes a
-     "from account" + "to account" and creates a paired ledger entry so
-     net-worth math reconciles with Excel.
-   - Optional fields visible behind a toggle: merchant/payee, attachment
-     (Phase 5 stub only; Blob upload comes in Phase 8).
-   - Surface this form prominently on `/dashboard` (collapsible card at the
-     top of the month view) and as a standalone `/dashboard/transactions/new`.
-   - Server action + zod validation reusing `lib/validation/finance.ts`.
-   - Audit on every create/edit/delete via `audit({ type: "transaction", … })`.
+What landed:
 
-2. **Account snapshot entry** — the monthly net-worth ritual.
-   - `/dashboard/snapshots` page: one row per account with month-end balance
-     entry, optimistic update, "save all" button.
-   - Pre-filled with last-known balance for each account.
-   - Same `personTag` + notes optional metadata.
+- Shared dashboard chrome at `app/dashboard/layout.tsx` with a client
+  sidebar (`components/dashboard/sidebar-nav.tsx`) that highlights the
+  active route via `usePathname()`. Nav items: Overview, Transactions,
+  Snapshots, Budgets, Imports, Audit.
+- Pure aggregate helpers at `lib/finance/period.ts` (UTC-anchored
+  month-range math) and `lib/finance/aggregates.ts`
+  (`monthlyIncomeExpenseSavings`, `monthlyTotalsByCategory`,
+  `lookupCategorySpend`). Transfers and investment cash-flows are
+  excluded from the savings calculation. Covered by 17 unit tests.
+- Transaction CRUD: `app/dashboard/transactions/{page,new/page,[id]/page}.tsx`
+  + `actions.ts`. `TransactionForm` (`components/finance/transaction-form.tsx`)
+  uses `useActionState`, kind tabs (`INCOME`/`EXPENSE`/`TRANSFER`),
+  conditional account fields, category filtering by kind, and a sticky
+  `personTag` selector backed by the httpOnly `fintracker.lastPersonTag`
+  cookie. List view supports month, kind, and payer filters.
+- Snapshot entry: `app/dashboard/snapshots/page.tsx` + `actions.ts` +
+  `components/finance/snapshot-grid.tsx`. One editable row per active
+  account, pre-filled with the most recent snapshot ≤ month-end; empty
+  rows are skipped server-side; a single batch audit event records
+  saved/skipped counts.
+- Budgets: `app/dashboard/budgets/page.tsx` + `actions.ts` +
+  `components/finance/budget-row-form.tsx`. Inline add/edit/delete; per
+  `(category, personTag)` progress bars vs. live spend; the household
+  savings-goal rate is edited from the same surface and persists to
+  `Household.savingsGoalRate`.
+- Audit viewer: `app/dashboard/audit/page.tsx` shows the last 200
+  `audit_events` for the household with `type` filter chips.
+- Dashboard overview rewritten: real KPIs (income / expense / savings +
+  savings rate vs goal), embedded collapsible `QuickEntryCard` at the
+  top. Net-worth chart stays as a labelled Phase-6 placeholder.
+- Refactor: `CURRENT_HOUSEHOLD_ID` promoted to `lib/auth/household.ts`
+  and adopted in 3 import-related files.
 
-3. **Budget management** — start with category-level monthly budgets and
-   the 60% savings goal.
-   - `/dashboard/budgets` page: add/edit budget rows by (category, period),
-     show progress bars vs. live transaction totals for the active month.
-   - Household-level savings rate goal stored on `households.savingsGoalRate`
-     (already seeded at 0.6).
+**Resolved open questions:**
 
-4. **Recurring templates** — out of scope for Phase 5 unless requested.
-   Capture as a backlog item; revisit before Phase 6.
+- Single-row transfers (schema enforces it via `fromAccountId` +
+  `toAccountId`); paired-row design was rejected — net-worth math in
+  Phase 6 will sum snapshots, not transfers.
+- `personTag` defaults via cookie ("last used wins"); UI choices are
+  Junjie / Jinyou / Household. Free-form selector since AUTH_BYPASS
+  cannot distinguish users.
 
-5. **Edit history / audit** — `/dashboard/audit` simple chronological list
-   of recent `audit_events` for the household. Filter by type.
+**Carry-forward to later phases:**
 
-#### Design decisions captured
-
-- Transfers create exactly one `Transaction` row of `kind=TRANSFER` with both
-  `accountId` (from) and a new `counterpartyAccountId` (to) field, OR two
-  paired rows linked by `transferGroupId`. **Decision deferred** to
-  implementation start — schema has neither today; whichever is simpler in
-  Prisma wins.
-- All entries default to today's date and the household's base currency (CNY).
-- The form re-uses the same `Transaction` model the importer writes to, so
-  imported and manual rows are queryable through the same surface.
-
-#### Open Phase-5 questions
-
-- For transfers: single row with a counterparty pointer, or two paired rows?
-  Two rows is more robust for per-account balance reconciliation but doubles
-  insert volume. Lean: paired rows linked by `transferGroupId`.
-- Should "payer" (`personTag`) default per session (e.g., Junjie's session →
-  payer=Junjie) or always be an explicit choice? Lean: default to current
-  user but show clearly + remember last-used.
-- Does Jin You sign in with the same Entra tenant or a guest account? This
-  blocks real multi-user testing. Carry forward to Phase 8 setup.
+- Recurring transaction templates: explicitly out of scope; revisit
+  before Phase 6 if needed.
+- Jin You's sign-in identity (guest tenant vs same): still open;
+  carried forward to Phase 8b.
+- Net-worth chart wiring: Phase 6.
 
 ### Phase 6: Dashboards and analysis
 
