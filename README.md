@@ -60,13 +60,16 @@ pnpm build                        # Production build
 Tracked in `plan.md`. Status:
 
 - [x] **Phase 1** — Product and architecture baseline (this scaffold).
-- [ ] Phase 2 — Microsoft Entra auth + household membership.
-- [ ] Phase 3 — Prisma + PostgreSQL finance schema.
-- [ ] Phase 4 — Legacy CSV import.
-- [ ] Phase 5 — Manual tracking workflows.
-- [ ] Phase 6 — Dashboards and analysis.
+- [x] **Phase 2** — Microsoft Entra auth + household membership.
+- [x] **Phase 3** — Prisma + PostgreSQL finance schema.
+- [x] **Phase 4** — Legacy CSV import.
+- [x] **Phase 5** — Manual tracking workflows.
+- [x] **Phase 6** — Dashboards and analysis.
 - [ ] Phase 7 — Azure AI insights.
-- [ ] Phase 8 — Azure deployment and hardening.
+- [x] **Phase 8a** — Azure deployment (live at
+  `https://fintracker-jl.azurewebsites.net`).
+- [ ] Phase 8b — Hardening (real Entra auth, structured audit log,
+  quarterly PDF export).
 
 ## Design tokens
 

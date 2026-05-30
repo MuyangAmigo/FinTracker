@@ -4,6 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Money } from "@/components/ui/money";
 import { PillTag } from "@/components/ui/pill-tag";
 import { QuickEntryCard } from "@/components/finance/quick-entry-card";
+import {
+  StackedAreaChart,
+  type AreaSeries,
+} from "@/components/charts/stacked-area-chart";
+import { KIND_COLOUR, KIND_LABEL } from "@/components/charts/palette";
 import { CURRENT_HOUSEHOLD_ID } from "@/lib/auth/household";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -15,6 +20,12 @@ import {
   currentMonthRange,
   formatMonthLabel,
 } from "@/lib/finance/period";
+import {
+  monthlyNetWorthSeries,
+  type AccountKind,
+  type AccountRow,
+  type SnapshotRow,
+} from "@/lib/finance/net-worth";
 
 import {
   createTransactionAction,
@@ -45,30 +56,51 @@ export default async function DashboardHome() {
   const range = currentMonthRange();
   const monthLabel = formatMonthLabel(range);
 
-  const [household, txns, accounts, categories, lastPersonTag, currency] =
-    await Promise.all([
-      prisma.household.findUnique({
-        where: { id: CURRENT_HOUSEHOLD_ID },
-        select: { baseCurrency: true, savingsGoalRate: true },
-      }),
-      prisma.transaction.findMany({
-        where: {
-          householdId: CURRENT_HOUSEHOLD_ID,
-          occurredOn: { gte: range.start, lt: range.nextStart },
-        },
-        select: {
-          kind: true,
-          amountMinor: true,
-          currency: true,
-          categoryId: true,
-          personTag: true,
-        },
-      }),
-      loadAccountOptions(),
-      loadCategoryOptions(),
-      readLastPersonTag(),
-      loadHouseholdCurrency(),
-    ]);
+  const [
+    household,
+    txns,
+    accountList,
+    snapshots,
+    accounts,
+    categories,
+    lastPersonTag,
+    currency,
+  ] = await Promise.all([
+    prisma.household.findUnique({
+      where: { id: CURRENT_HOUSEHOLD_ID },
+      select: { baseCurrency: true, savingsGoalRate: true },
+    }),
+    prisma.transaction.findMany({
+      where: {
+        householdId: CURRENT_HOUSEHOLD_ID,
+        occurredOn: { gte: range.start, lt: range.nextStart },
+      },
+      select: {
+        kind: true,
+        amountMinor: true,
+        currency: true,
+        categoryId: true,
+        personTag: true,
+      },
+    }),
+    prisma.account.findMany({
+      where: { householdId: CURRENT_HOUSEHOLD_ID, archivedAt: null },
+      select: { id: true, kind: true },
+    }),
+    prisma.accountSnapshot.findMany({
+      where: { householdId: CURRENT_HOUSEHOLD_ID },
+      select: {
+        accountId: true,
+        asOf: true,
+        balanceMinor: true,
+        currency: true,
+      },
+    }),
+    loadAccountOptions(),
+    loadCategoryOptions(),
+    readLastPersonTag(),
+    loadHouseholdCurrency(),
+  ]);
 
   const baseCurrency = household?.baseCurrency ?? "CNY";
   const totals = monthlyIncomeExpenseSavings(txns as TxnRow[], baseCurrency);
@@ -78,6 +110,31 @@ export default async function DashboardHome() {
   const actualRate = totals.savingsRate;
   const onTrack =
     actualRate !== null ? actualRate >= goalFraction : null;
+
+  const accountRows: AccountRow[] = accountList.map((a) => ({
+    id: a.id,
+    kind: a.kind as AccountKind,
+  }));
+  const snapshotRows: SnapshotRow[] = snapshots.map((s) => ({
+    accountId: s.accountId,
+    asOf: s.asOf,
+    balanceMinor: s.balanceMinor,
+    currency: s.currency,
+  }));
+  const fullNetWorth = monthlyNetWorthSeries(snapshotRows, accountRows, {
+    baseCurrency,
+  });
+  // Trim to the most recent 12 months so the overview card stays compact.
+  const netWorth = {
+    ...fullNetWorth,
+    points: fullNetWorth.points.slice(-12),
+  };
+  const netWorthSeries: AreaSeries[] = netWorth.presentKinds.map((k) => ({
+    key: k,
+    label: KIND_LABEL[k],
+    colour: KIND_COLOUR[k],
+    values: netWorth.points.map((p) => p.byKindMinor[k]),
+  }));
 
   return (
     <main className="flex-1 p-6 md:p-10">
@@ -148,21 +205,49 @@ export default async function DashboardHome() {
             padding="md"
             className="bg-brand-dark-900/60 text-on-primary lg:col-span-2"
           >
-            <p className="font-micro-cap mb-3 text-on-primary/60">
-              Net-worth trend (Phase 6 placeholder)
-            </p>
-            <div className="font-body-tabular flex h-48 items-end gap-1">
-              {[24, 28, 31, 30, 33, 35, 38, 42, 45, 47, 51, 55].map((h, i) => (
-                <div
-                  key={i}
-                  className="flex-1 rounded-t-md bg-primary-soft/80"
-                  style={{ height: `${h * 1.6}%` }}
-                />
-              ))}
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <p className="font-micro-cap text-on-primary/60">
+                Net-worth · last 12 months
+              </p>
+              <Link
+                href="/dashboard/analysis"
+                className="font-micro-cap text-primary-soft hover:underline"
+              >
+                Full analysis →
+              </Link>
             </div>
-            <p className="font-body-md mt-3 text-on-primary/60">
-              Wire up to monthly snapshots in Phase 6.
-            </p>
+            {netWorth.points.length === 0 ? (
+              <p className="font-body-md py-8 text-center text-on-primary/60">
+                No snapshots logged yet.{" "}
+                <Link
+                  href="/dashboard/snapshots"
+                  className="text-primary-soft hover:underline"
+                >
+                  Record month-end balances →
+                </Link>
+              </p>
+            ) : (
+              <>
+                <StackedAreaChart
+                  ariaLabel="Net-worth trend stacked by account kind"
+                  xLabels={netWorth.points.map((p) => p.monthKey.slice(2))}
+                  series={netWorthSeries}
+                  height={200}
+                />
+                <ul className="font-micro mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-on-primary/70">
+                  {netWorth.presentKinds.map((k) => (
+                    <li key={k} className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className="inline-block h-2.5 w-2.5 rounded-sm"
+                        style={{ backgroundColor: KIND_COLOUR[k] }}
+                      />
+                      {KIND_LABEL[k]}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </Card>
 
           <Card
@@ -188,6 +273,22 @@ export default async function DashboardHome() {
                   className="text-primary-soft hover:underline"
                 >
                   Manage budgets →
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/analysis"
+                  className="text-primary-soft hover:underline"
+                >
+                  Trends and breakdowns →
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/accounts"
+                  className="text-primary-soft hover:underline"
+                >
+                  Per-account drilldown →
                 </Link>
               </li>
               <li>
