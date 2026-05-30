@@ -422,12 +422,12 @@ Carry-forward to Phase 8b:
 
 Sub-todos (tracked in SQL: `p7-*`):
 
-- `p7-foundry-client` — `lib/ai/foundry.ts` wrapper, env-driven endpoint/key (or managed identity), health route.
-- `p7-monthly-summary` — month-end job that asks Foundry for a household summary; stores to a new `Insight` table; shows on dashboard.
-- `p7-anomaly-flags` — flag transactions > category baseline σ; show Foundry-generated explanation.
-- `p7-chat-ask` — conversational sidebar with RAG over Transaction + AccountSnapshot.
+- ✅ `p7-foundry-client` — `lib/ai/foundry.ts` wraps Microsoft Foundry / Azure OpenAI chat-completions over plain `fetch` (no SDK). Env-driven (`FOUNDRY_ENDPOINT`, `FOUNDRY_DEPLOYMENT`, `FOUNDRY_API_KEY`, optional `FOUNDRY_API_VERSION`, `FOUNDRY_TIMEOUT_MS`). When any of those are unset the client returns a deterministic mock response derived from the input metrics so dev + tests + the deployed site stay green without burning model quota. `/api/health/foundry` reports mode/configured/deployment/promptVersion.
+- ✅ `p7-monthly-summary` — `lib/ai/{metrics,prompts,validate,insights}.ts` build aggregate-only snapshots (current vs previous month totals + deltas, savings rate vs goal, top expense categories, person split, net-worth trajectory), call the client behind a JSON-object response contract validated with Zod, then persist to `InsightRun` + `Insight` (status state machine, `payload` JSON for the structured response, `body` for the Markdown render). `/dashboard/insights` lists newest-first with a Generate CTA + thumbs feedback; latest insight surfaces on `/dashboard`. Every generation + feedback is audited as `insight`. **Aggregates only — no raw txn rows, payees, or notes ever leave the database.**
+- ⏸ `p7-anomaly-flags` — flag transactions > category baseline σ; show Foundry-generated explanation. Carry-forward; needs the rolling σ pipeline.
+- ⏸ `p7-chat-ask` — conversational sidebar with RAG over Transaction + AccountSnapshot. Carry-forward; needs a retrieval store + chat thread schema.
 
-Cross-cutting: aggregate metric generators, structured insight validation/storage, prompt/model version tracking, user feedback capture.
+Cross-cutting: aggregate metric generators (`lib/ai/metrics.ts`), structured insight validation (`lib/ai/validate.ts`), prompt version tracking (`PROMPT_VERSION = "monthly-summary-v1"` stored on every InsightRun), user feedback capture (`feedback`, `feedbackNote` on `Insight`).
 
 ### Phase 8: Deployment and hardening
 
