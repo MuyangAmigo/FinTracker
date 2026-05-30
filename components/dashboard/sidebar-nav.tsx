@@ -8,6 +8,8 @@ const NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/dashboard/transactions", label: "Transactions" },
   { href: "/dashboard/snapshots", label: "Snapshots" },
   { href: "/dashboard/budgets", label: "Budgets" },
+  { href: "/dashboard/analysis", label: "Analysis" },
+  { href: "/dashboard/accounts", label: "Accounts" },
   { href: "/dashboard/imports", label: "Imports" },
   { href: "/dashboard/audit", label: "Audit" },
 ];

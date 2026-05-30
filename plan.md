@@ -385,17 +385,38 @@ What landed:
   carried forward to Phase 8b.
 - Net-worth chart wiring: Phase 6.
 
-### Phase 6: Dashboards and analysis
+### Phase 6: Dashboards and analysis ✓ DONE
 
 Sub-todos (tracked in SQL: `p6-*`):
 
-- `p6-net-worth-chart` — stacked-area net-worth time series from AccountSnapshot.
-- `p6-cash-flow-chart` — monthly income vs expense bars + savings-rate line vs household goal.
-- `p6-category-breakdown` — donut/treemap by category, toggleable by personTag.
-- `p6-account-detail` — per-account drilldown with snapshot trend + transactions + computed-vs-snapshot variance hints.
-- `p6-export` — CSV / quarterly-PDF export.
+- `p6-aggregates` ✓ — `lib/finance/net-worth.ts`, `cash-flow.ts`,
+  `category-breakdown.ts` + 24 new unit tests (72 total green).
+- `p6-charts` ✓ — pure-SVG components in `components/charts/`:
+  `StackedAreaChart`, `BarsLineChart`, `DonutChart`, `LineChart` plus
+  shared `palette.ts` (no chart-lib dependency added).
+- `p6-net-worth-chart` ✓ — month-end snapshots stacked by `AccountKind`
+  on `/dashboard/analysis` (full history) and `/dashboard` (last 12).
+- `p6-cash-flow-chart` ✓ — rolling 12-month income/expense bars with
+  savings-rate line and dashed household-goal reference on
+  `/dashboard/analysis`.
+- `p6-category-breakdown` ✓ — donut + bilingual legend with payer
+  toggle (All / Junjie / Jinyou / Household / Unassigned).
+- `p6-account-detail` ✓ — `/dashboard/accounts` index + `/[id]`
+  drilldown with snapshot trend, recent transactions, and variance
+  hints flagging snapshot-vs-transaction residuals > 1 %.
+- `p6-export` ✓ — `/api/export/transactions.csv` and
+  `/api/export/snapshots.csv` (RFC 4180, native currency, full
+  history). PDF export deferred (see carry-forward).
+- `p6-nav` ✓ — sidebar gains Analysis + Accounts entries.
 
-Add filters by person, account, category, period, and shared/personal scope.
+Filters by person, account, category, and period are all URL search
+params so the surfaces remain deep-linkable without client JS.
+
+Carry-forward to Phase 8b:
+
+- Quarterly PDF export — CSV + browser print-to-PDF cover the gap; a
+  dedicated PDF pipeline would pull in `puppeteer`/`pdfkit` and is held
+  back until the dataset shape settles.
 
 ### Phase 7: Azure AI insights
 
