@@ -65,6 +65,7 @@ export default async function DashboardHome() {
     categories,
     lastPersonTag,
     currency,
+    latestInsight,
   ] = await Promise.all([
     prisma.household.findUnique({
       where: { id: CURRENT_HOUSEHOLD_ID },
@@ -100,6 +101,11 @@ export default async function DashboardHome() {
     loadCategoryOptions(),
     readLastPersonTag(),
     loadHouseholdCurrency(),
+    prisma.insight.findFirst({
+      where: { householdId: CURRENT_HOUSEHOLD_ID, kind: "SUMMARY" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true, createdAt: true, payload: true },
+    }),
   ]);
 
   const baseCurrency = household?.baseCurrency ?? "CNY";
@@ -255,6 +261,48 @@ export default async function DashboardHome() {
             padding="md"
             className="bg-brand-dark-900/60 text-on-primary"
           >
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <p className="font-micro-cap text-on-primary/60">
+                Latest AI insight
+              </p>
+              <Link
+                href="/dashboard/insights"
+                className="font-micro-cap text-primary-soft hover:underline"
+              >
+                All insights →
+              </Link>
+            </div>
+            {latestInsight ? (
+              <>
+                <p className="font-display-sm text-on-primary">
+                  {latestInsight.title}
+                </p>
+                <p className="font-body-sm mt-2 line-clamp-4 text-on-primary/75">
+                  {extractInsightSummary(latestInsight.payload) ??
+                    "Open the insights page for the full summary."}
+                </p>
+                <p className="font-micro mt-3 text-on-primary/50">
+                  {latestInsight.createdAt.toISOString().slice(0, 10)}
+                </p>
+              </>
+            ) : (
+              <p className="font-body-md text-on-primary/70">
+                No insights yet.{" "}
+                <Link
+                  href="/dashboard/insights"
+                  className="text-primary-soft hover:underline"
+                >
+                  Generate your first monthly summary →
+                </Link>
+              </p>
+            )}
+          </Card>
+
+          <Card
+            variant="dashboardMockup"
+            padding="md"
+            className="bg-brand-dark-900/60 text-on-primary lg:col-span-3"
+          >
             <p className="font-micro-cap mb-3 text-on-primary/60">
               Quick links
             </p>
@@ -361,4 +409,17 @@ function KpiCard({
       ) : null}
     </Card>
   );
+}
+
+/**
+ * Pulls the human-readable summary string out of an Insight.payload JSON
+ * value. Returns null for malformed / missing payloads — callers fall back
+ * to a "see all insights" prompt.
+ */
+function extractInsightSummary(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as { summary?: unknown }).summary;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
 }

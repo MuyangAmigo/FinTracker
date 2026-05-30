@@ -65,11 +65,12 @@ Tracked in `plan.md`. Status:
 - [x] **Phase 4** — Legacy CSV import.
 - [x] **Phase 5** — Manual tracking workflows.
 - [x] **Phase 6** — Dashboards and analysis.
-- [ ] Phase 7 — Azure AI insights.
+- [x] **Phase 7** — Azure AI insights (monthly summaries; anomaly + chat
+  carried forward).
 - [x] **Phase 8a** — Azure deployment (live at
   `https://fintracker-jl.azurewebsites.net`).
 - [ ] Phase 8b — Hardening (real Entra auth, structured audit log,
-  quarterly PDF export).
+  quarterly PDF export, Foundry managed identity + Key Vault).
 
 ## Design tokens
 
