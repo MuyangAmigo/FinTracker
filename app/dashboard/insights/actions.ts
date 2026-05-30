@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getApiSession } from "@/lib/auth/session";
 import {
+  generateAnomalyInsights,
   generateMonthlySummary,
   submitInsightFeedback,
 } from "@/lib/ai/insights";
@@ -14,6 +15,8 @@ import {
  *   - `generateInsightAction` triggers a new monthly-summary run for the
  *     current calendar month. Successful runs invalidate the insights
  *     page + dashboard overview so the new card appears immediately.
+ *   - `detectAnomaliesAction` triggers an anomaly-detection run (rolling
+ *     baseline + Foundry-explained flags) over the current month.
  *   - `recordInsightFeedbackAction` records a thumbs ±1 (with optional
  *     note) on a specific insight. Used by the per-card feedback form.
  */
@@ -36,6 +39,31 @@ export async function generateInsightAction(): Promise<GenerateActionResult> {
     return { ok: false, error: outcome.error };
   }
   return { ok: true, insightId: outcome.insightId, mock: outcome.mock };
+}
+
+export type DetectAnomaliesActionResult =
+  | { ok: true; insightId: string; mock: boolean; anomalyCount: number }
+  | { ok: false; error: string };
+
+export async function detectAnomaliesAction(): Promise<DetectAnomaliesActionResult> {
+  const session = await getApiSession();
+  if (!session?.user?.email) {
+    return { ok: false, error: "unauthenticated" };
+  }
+  const outcome = await generateAnomalyInsights({
+    actorEmail: session.user.email,
+  });
+  revalidatePath("/dashboard/insights");
+  revalidatePath("/dashboard");
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.error };
+  }
+  return {
+    ok: true,
+    insightId: outcome.insightId,
+    mock: outcome.mock,
+    anomalyCount: outcome.anomalyCount,
+  };
 }
 
 export type FeedbackActionResult = { ok: true } | { ok: false; error: string };

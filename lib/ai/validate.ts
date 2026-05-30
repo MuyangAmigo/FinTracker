@@ -34,3 +34,30 @@ export const insightResponseSchema = z.object({
 });
 
 export type InsightResponse = z.infer<typeof insightResponseSchema>;
+
+export const anomalyResponseSchema = z.object({
+  title: z.string().min(4).max(140),
+  summary: z.string().min(10).max(2000),
+  anomalies: z
+    .array(
+      z.object({
+        ref: z.string().min(1).max(40),
+        severity: z.enum(["low", "medium", "high"]),
+        explanation: z.string().min(4).max(600),
+      }),
+    )
+    .max(20)
+    .default([]),
+  recommendations: z.array(z.string().min(4).max(280)).max(6).default([]),
+  flags: z
+    .array(
+      z.object({
+        kind: z.enum(["positive", "warning", "watch"]),
+        message: z.string().min(4).max(280),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+
+export type AnomalyResponse = z.infer<typeof anomalyResponseSchema>;
