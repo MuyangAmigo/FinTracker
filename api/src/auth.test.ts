@@ -1,8 +1,64 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
-import { verifyAccessToken, authenticate } from "./auth.js";
+import {
+  verifyAccessToken,
+  authenticate,
+  authorizeSubject,
+  validateAccessClaims,
+  CONSUMER_TENANT,
+} from "./auth.js";
 
 describe("API JWT validation", () => {
+  it("uses an immutable personal-account subject, never an email hint", () => {
+    expect(
+      authorizeSubject({ tid: CONSUMER_TENANT, sub: "owner" }, "owner", "a").personId,
+    ).toBe("a");
+    expect(() =>
+      authorizeSubject(
+        { tid: CONSUMER_TENANT, sub: "other", preferred_username: "owner@example.com" },
+        "owner",
+        "a",
+      ),
+    ).toThrow();
+    expect(() =>
+      authorizeSubject({ tid: "other-tenant", sub: "owner" }, "owner", "a"),
+    ).toThrow();
+  });
+  it("isolates finance permissions from the referenced site's permissions", async () => {
+    const { privateKey, publicKey } = await generateKeyPair("RS256", {
+      extractable: true,
+    });
+    const jwk = await exportJWK(publicKey);
+    const resolver = createLocalJWKSet({
+      keys: [{ ...jwk, kid: "synthetic", alg: "RS256" }],
+    });
+    const sign = (scope: string) =>
+      new SignJWT({ tid: CONSUMER_TENANT, scp: scope })
+        .setSubject("owner")
+        .setProtectedHeader({ alg: "RS256", kid: "synthetic" })
+        .setAudience("finance-client")
+        .setIssuer(`https://login.microsoftonline.com/${CONSUMER_TENANT}/v2.0`)
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(privateKey);
+    const finance = await validateAccessClaims(
+      await sign("FinTracker.Access"),
+      [CONSUMER_TENANT],
+      "finance-client",
+      "FinTracker.Access",
+      resolver,
+    );
+    expect(finance.sub).toBe("owner");
+    await expect(
+      validateAccessClaims(
+        await sign("TravelJournal.Edit"),
+        [CONSUMER_TENANT],
+        "finance-client",
+        "FinTracker.Access",
+        resolver,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
   it("validates signature, audience, issuer, expiry, scope, and both allowed identities", async () => {
     const pair = await generateKeyPair("RS256", { extractable: true });
     const jwk = await exportJWK(pair.publicKey);
@@ -29,6 +85,7 @@ describe("API JWT validation", () => {
         ver: "2.0",
         scp: options.scope ?? "access_as_user",
       })
+        .setSubject(`synthetic-${user.objectId}`)
         .setProtectedHeader({ alg: "RS256", kid: "synthetic" })
         .setIssuedAt()
         .setIssuer(

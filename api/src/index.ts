@@ -1,9 +1,9 @@
-import {
-  app,
+import functions, {
   type HttpRequest,
   type HttpResponseInit,
   type InvocationContext,
 } from "@azure/functions";
+const { app } = functions;
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { authenticate, HttpError } from "./auth.js";
@@ -30,8 +30,8 @@ export async function handler(
   headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type";
   if (request.method === "OPTIONS") return { status: 204, headers };
   try {
-    const identity = await authenticate(request.headers.get("authorization"));
     const body: unknown = request.method === "GET" ? null : await request.json();
+    const identity = await authenticate(request.headers.get("authorization"));
     const result = await execute(
       request.params.resource,
       request.params.id,

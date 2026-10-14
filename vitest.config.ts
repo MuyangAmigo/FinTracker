@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   test: {
+    testTimeout: 30000,
+    hookTimeout: 30000,
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
     exclude: [

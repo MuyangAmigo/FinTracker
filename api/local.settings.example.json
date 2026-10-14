@@ -7,6 +7,8 @@
     "HOUSEHOLD_ID": "household",
     "API_AUDIENCE": "REPLACE_WITH_API_CLIENT_ID",
     "API_SCOPE": "access_as_user",
+    "ALLOWED_MICROSOFT_SUB": "OPTIONAL_VERIFIED_PERSONAL_ACCOUNT_SUBJECT",
+    "AUTH_PERSON_ID": "MATCHING_DATABASE_PERSON_ID",
     "ALLOWED_IDENTITIES": "[{\"tenantId\":\"TENANT_UUID\",\"objectId\":\"USER_UUID\",\"personId\":\"person-a\"},{\"tenantId\":\"TENANT_UUID\",\"objectId\":\"USER_UUID\",\"personId\":\"person-b\"}]",
     "ALLOWED_ORIGINS": "http://localhost:3000,https://muyangamigo.github.io"
   }

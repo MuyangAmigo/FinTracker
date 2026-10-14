@@ -132,6 +132,19 @@ the allowed identity tenant/object IDs from the users' validated token claims,
 not from the subscription's directory ID. Personal accounts use the Microsoft
 consumer tenant in their tokens.
 
+The current deployment follows the referenced Microsoft personal-account
+authentication: the consumer issuer, app audience, and `FinTracker.Access`
+delegated scope are validated, then the immutable `sub` is matched to the private
+server allowlist. Email addresses are not authorization keys and are not
+published in frontend configuration. One account is enabled initially.
+
+The existing personal App Service can run the same API through
+`node dist/api/src/server.js`; its existing PostgreSQL database is reused with
+new tables while legacy tables remain unchanged. This requires no new hosting
+or database resources. Set backend-only `ALLOWED_MICROSOFT_SUB` and
+`AUTH_PERSON_ID` for this consumer-subject configuration. The Functions host
+remains supported with `npm run start:functions`.
+
 Configure backend-only settings in the Function App: `DATABASE_URL`,
 `HOUSEHOLD_ID`, `API_AUDIENCE`, `API_SCOPE`, `ALLOWED_IDENTITIES`, and
 `ALLOWED_ORIGINS`. The allowed Pages origin is `https://muyangamigo.github.io`,

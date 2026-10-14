@@ -12,8 +12,8 @@ import {
 } from "../../shared/finance.js";
 import { HttpError, type Identity } from "./auth.js";
 
-export const db = new PrismaClient();
-export const householdId = () => process.env.HOUSEHOLD_ID ?? "household";
+import { db, householdId } from "./db.js";
+export { db, householdId } from "./db.js";
 async function lockAccounts(
   tx: Prisma.TransactionClient,
   household: string,

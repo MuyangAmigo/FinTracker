@@ -15,6 +15,7 @@ export class HttpError extends Error {
     super(message);
   }
 }
+export const CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 export const identitySchema = z
   .array(
     z.object({
@@ -29,12 +30,16 @@ export const identitySchema = z
       personId: z.string().min(1),
     }),
   )
-  .length(2)
+  .min(1)
+  .max(2)
   .refine(
-    (ids) => new Set(ids.map((i) => `${i.tenantId}:${i.objectId}`)).size === 2,
-    "Two distinct identities are required",
+    (ids) => new Set(ids.map((i) => `${i.tenantId}:${i.objectId}`)).size === ids.length,
+    "Distinct identities are required",
   );
 export type Identity = z.infer<typeof identitySchema>[number];
+const keys = createRemoteJWKSet(
+  new URL("https://login.microsoftonline.com/consumers/discovery/v2.0/keys"),
+);
 export function identify(
   claims: JWTPayload,
   identities: Identity[],
@@ -43,7 +48,7 @@ export function identify(
   if (
     claims.ver !== "2.0" ||
     typeof claims.scp !== "string" ||
-    !claims.scp.split(" ").includes(scope)
+    !claims.scp.split(/\s+/).includes(scope)
   )
     throw new HttpError(403, "缺少 API 授权");
   const match = identities.find(
@@ -52,28 +57,24 @@ export function identify(
   if (!match) throw new HttpError(403, "此 Microsoft 账户未获家庭访问权限");
   return match;
 }
-const keys = createRemoteJWKSet(
-  new URL("https://login.microsoftonline.com/common/discovery/v2.0/keys"),
-);
-export async function verifyAccessToken(
+export async function validateAccessClaims(
   token: string,
-  identities: Identity[],
+  tenants: string[],
   audience: string,
   scope: string,
   resolver: JWTVerifyGetKey = keys,
-): Promise<Identity> {
-  const issuers = [
-    ...new Set(
-      identities.map((i) => `https://login.microsoftonline.com/${i.tenantId}/v2.0`),
-    ),
-  ];
+): Promise<JWTPayload> {
   let claims: JWTPayload;
   try {
     ({ payload: claims } = await jwtVerify(token, resolver, {
-      audience,
-      issuer: issuers,
+      audience: [audience, `api://${audience}`],
+      issuer: [
+        ...new Set(
+          tenants.map((tenant) => `https://login.microsoftonline.com/${tenant}/v2.0`),
+        ),
+      ],
       algorithms: ["RS256"],
-      requiredClaims: ["exp", "iat", "tid", "oid", "ver", "scp"],
+      requiredClaims: ["exp", "iat", "tid", "scp", "sub"],
     }));
   } catch (error) {
     if (
@@ -85,26 +86,68 @@ export async function verifyAccessToken(
       throw new HttpError(401, "登录已失效或令牌无效，请重新登录");
     throw new HttpError(503, "暂时无法验证 Microsoft 登录，请稍后重试");
   }
-  return identify(claims, identities, scope);
+  if (
+    typeof claims.tid !== "string" ||
+    typeof claims.sub !== "string" ||
+    typeof claims.scp !== "string" ||
+    !claims.scp.split(/\s+/).includes(scope)
+  )
+    throw new HttpError(403, "缺少 API 授权");
+  return claims;
+}
+export async function verifyAccessToken(
+  token: string,
+  identities: Identity[],
+  audience: string,
+  scope: string,
+  resolver: JWTVerifyGetKey = keys,
+): Promise<Identity> {
+  return identify(
+    await validateAccessClaims(
+      token,
+      identities.map((i) => i.tenantId),
+      audience,
+      scope,
+      resolver,
+    ),
+    identities,
+    scope,
+  );
+}
+export function authorizeSubject(
+  claims: JWTPayload,
+  subject: string,
+  personId: string,
+): Identity {
+  if (claims.tid !== CONSUMER_TENANT || !subject || claims.sub !== subject)
+    throw new HttpError(403, "此 Microsoft 账户未获家庭访问权限");
+  return { tenantId: CONSUMER_TENANT, objectId: subject, personId };
 }
 export async function authenticate(header: string | null): Promise<Identity> {
-  if (!header?.startsWith("Bearer ")) throw new HttpError(401, "请先登录");
-  const audience = process.env.API_AUDIENCE;
-  const raw = process.env.ALLOWED_IDENTITIES;
-  if (!audience || !raw) throw new HttpError(503, "后端登录配置尚未完成");
+  const match = header?.match(/^Bearer\s+(\S+)$/i);
+  if (!match) throw new HttpError(401, "请先登录");
+  const audience = process.env.API_AUDIENCE,
+    scope = process.env.API_SCOPE ?? "FinTracker.Access";
+  if (!audience) throw new HttpError(503, "后端登录配置尚未完成");
+  const subject = process.env.ALLOWED_MICROSOFT_SUB;
+  if (subject) {
+    const personId = process.env.AUTH_PERSON_ID;
+    if (!personId) throw new HttpError(503, "家庭成员配置未完成");
+    const claims = await validateAccessClaims(
+      match[1],
+      [CONSUMER_TENANT],
+      audience,
+      scope,
+    );
+    return authorizeSubject(claims, subject, personId);
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(process.env.ALLOWED_IDENTITIES ?? "[]");
   } catch {
     throw new HttpError(503, "后端身份配置无效");
   }
   const validated = identitySchema.safeParse(parsed);
   if (!validated.success) throw new HttpError(503, "后端身份配置无效");
-  const identities = validated.data;
-  return verifyAccessToken(
-    header.slice(7),
-    identities,
-    audience,
-    process.env.API_SCOPE ?? "access_as_user",
-  );
+  return verifyAccessToken(match[1], validated.data, audience, scope);
 }

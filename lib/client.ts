@@ -14,11 +14,19 @@ export const publicConfig = {
 export const configured = Boolean(
   publicConfig.apiUrl && publicConfig.clientId && publicConfig.scope,
 );
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    text: string,
+  ) {
+    super(text);
+  }
+}
 export function createAuth() {
   return new PublicClientApplication({
     auth: {
       clientId: publicConfig.clientId,
-      authority: "https://login.microsoftonline.com/common",
+      authority: "https://login.microsoftonline.com/consumers",
       redirectUri: `${window.location.origin}${publicConfig.basePath}/`,
       postLogoutRedirectUri: `${window.location.origin}${publicConfig.basePath}/`,
     },
@@ -55,7 +63,10 @@ export async function request(
   if (!response.ok) {
     const data: unknown = await response.json();
     const parsed = z.object({ error: z.string() }).safeParse(data);
-    throw new Error(parsed.success ? parsed.data.error : `请求失败 (${response.status})`);
+    throw new ApiError(
+      response.status,
+      parsed.success ? parsed.data.error : `请求失败 (${response.status})`,
+    );
   }
   return response;
 }
