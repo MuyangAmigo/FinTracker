@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Household {
+  id         String @id
+  name       String
+  people     Person[]
+  accounts   Account[]
+  lines      LedgerLine[]
+  periods    MonthPeriod[]
+  entries    MonthlyEntry[]
+  balances   AssetBalance[]
+  references SourceReference[]
+}
+
+model Person {
+  id          String @id
+  householdId String
+  name        String
+  household   Household @relation(fields: [householdId], references: [id])
+  accounts    Account[]
+  lines       LedgerLine[]
+  entries     MonthlyEntry[]
+  balances    AssetBalance[]
+  @@unique([householdId, name])
+}
+
+model Account {
+  id             String @id @default(cuid())
+  householdId    String
+  name           String
+  type           String
+  ownerId        String?
+  assetEnabled   Boolean @default(true)
+  expenseEnabled Boolean @default(false)
+  archived       Boolean @default(false)
+  version        Int @default(0)
+  household      Household @relation(fields: [householdId], references: [id])
+  owner          Person? @relation(fields: [ownerId], references: [id])
+  lines          LedgerLine[]
+  balances       AssetBalance[]
+  @@index([householdId])
+}
+
+model LedgerLine {
+  id          String @id @default(cuid())
+  householdId String
+  name        String
+  kind        String
+  ownerId     String?
+  accountId   String? @unique
+  archived    Boolean @default(false)
+  household   Household @relation(fields: [householdId], references: [id])
+  owner       Person? @relation(fields: [ownerId], references: [id])
+  account     Account? @relation(fields: [accountId], references: [id])
+  entries     MonthlyEntry[]
+  @@index([householdId])
+}
+
+model MonthPeriod {
+  id              String @id @default(cuid())
+  householdId     String
+  month           String
+  incomeComplete  Boolean @default(false)
+  expenseComplete Boolean @default(false)
+  version         Int @default(0)
+  household       Household @relation(fields: [householdId], references: [id])
+  @@unique([householdId, month])
+}
+
+model MonthlyEntry {
+  id             String @id @default(cuid())
+  householdId    String
+  lineId         String
+  month          String
+  ownerId        String?
+  amountMinor    BigInt
+  note           String @default("")
+  author         String
+  manuallyEdited Boolean @default(false)
+  updatedAt      DateTime @updatedAt
+  household      Household @relation(fields: [householdId], references: [id])
+  line           LedgerLine @relation(fields: [lineId], references: [id])
+  owner          Person? @relation(fields: [ownerId], references: [id])
+  @@unique([lineId, month])
+  @@index([householdId, month])
+}
+
+model AssetBalance {
+  id             String @id @default(cuid())
+  householdId    String
+  accountId      String
+  asOf           String
+  precision      String
+  ownerId        String?
+  amountMinor    BigInt
+  note           String @default("")
+  author         String
+  version        Int @default(0)
+  manuallyEdited Boolean @default(false)
+  updatedAt      DateTime @updatedAt
+  household      Household @relation(fields: [householdId], references: [id])
+  account        Account @relation(fields: [accountId], references: [id])
+  owner          Person? @relation(fields: [ownerId], references: [id])
+  @@unique([accountId, asOf])
+  @@index([householdId, asOf])
+}
+
+model SourceReference {
+  id          String @id
+  householdId String
+  source      String
+  kind        String
+  period      String
+  ownerId     String?
+  valueMinor  BigInt?
+  note        String @default("")
+  household   Household @relation(fields: [householdId], references: [id])
+  @@index([householdId])
+}

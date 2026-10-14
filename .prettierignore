@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+build
+coverage
+.scaffold-backup
+api/dist/
+api/node_modules/
+api/prisma/
+.impeccable/hook.cache.json
