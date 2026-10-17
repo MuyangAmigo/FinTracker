@@ -92,6 +92,11 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
         <path d="M8 10V7a4 4 0 0 1 8 0v3" />
       </>
     ),
+    home: (
+      <>
+        <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
+      </>
+    ),
     close: <path d="m6 6 12 12M6 18 18 6" />,
   };
   return (
@@ -112,6 +117,140 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 function ownerName(store: Store, id: string | null) {
   return store.people.find((p) => p.id === id)?.name ?? "共同";
+}
+function Brand() {
+  return (
+    <Link href="/" className="brand" aria-label="FinTracker 首页">
+      <span className="brand-mark">
+        <Icon name="wallet" size={23} />
+      </span>
+      <span>
+        FinTracker<small>一起，积累好生活</small>
+      </span>
+    </Link>
+  );
+}
+function Landing() {
+  return (
+    <>
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-copy">
+          <div className="landing-kicker">
+            <span className="status-dot" />
+            两个人 · 一个家 · 一本账
+          </div>
+          <h1 id="landing-title">
+            把生活过好，
+            <br />
+            <em>把账记清。</em>
+          </h1>
+          <p className="landing-description">
+            不必追着每一笔开销跑。
+            <br />
+            每月一起理清收支，看看积累，
+            <br />
+            为想要的生活，留一份从容。
+          </p>
+          <a className="landing-explore" href="#landing-features">
+            从这里，了解我们的账本 <Icon name="arrow" size={18} />
+          </a>
+          <p className="landing-access">
+            <Icon name="lock" size={14} />
+            右上角使用 Microsoft 账户登录，仅限获准的家庭成员。
+          </p>
+        </div>
+        <div className="landing-visual" aria-hidden="true">
+          <div className="landing-orbit" />
+          <div className="landing-notebook">
+            <div className="notebook-heading">
+              <Icon name="home" size={21} />
+              <span>THE HOME LEDGER</span>
+            </div>
+            <div className="notebook-title">
+              生活有度，
+              <br />
+              积累有迹。
+            </div>
+            <div className="notebook-rule" />
+            <div className="notebook-chart">
+              <span>把日子，慢慢过成喜欢的样子</span>
+              <svg viewBox="0 0 280 105" fill="none">
+                <path className="notebook-chart-grid" d="M0 25h280M0 60h280M0 95h280" />
+                <path
+                  className="notebook-chart-line"
+                  d="M4 88C28 88 24 65 49 69S80 82 103 58s35 5 58-17 29 1 51-15 36-5 64-21"
+                />
+              </svg>
+            </div>
+            <div className="notebook-bottom">
+              <span>OUR LIFE, IN BALANCE</span>
+              <Icon name="home" size={17} />
+            </div>
+          </div>
+          <div className="landing-label label-income">
+            <span>
+              <Icon name="book" size={20} />
+            </span>
+            收支有数
+          </div>
+          <div className="landing-label label-home">
+            <span>
+              <Icon name="home" size={20} />
+            </span>
+            心里有底，生活有光
+          </div>
+        </div>
+      </section>
+      <section
+        className="landing-features"
+        id="landing-features"
+        aria-label="账本能帮你做什么"
+      >
+        {[
+          {
+            icon: "book",
+            number: "01",
+            title: "每月一次，收支有数",
+            text: "按月整理收入与账户支出，不必逐笔打卡，也能看清生活的节奏。",
+          },
+          {
+            icon: "wallet",
+            number: "02",
+            title: "每份积累，都看得见",
+            text: "存款、投资、房产与车辆，独立记录实际余额，留住每一次积累。",
+          },
+          {
+            icon: "lock",
+            number: "03",
+            title: "两个人的，私人空间",
+            text: "个人与共同账户清晰分开，家庭记录仅向获准成员开放。",
+          },
+        ].map((feature) => (
+          <article className="landing-feature" key={feature.number}>
+            <div className="landing-feature-top">
+              <Icon name={feature.icon} size={22} />
+              <span>{feature.number}</span>
+            </div>
+            <h2>{feature.title}</h2>
+            <p>{feature.text}</p>
+          </article>
+        ))}
+      </section>
+      {!configured && (
+        <div className="landing-setup" role="status">
+          <Icon name="lock" size={16} />
+          <p>登录服务尚未配置，连接 Microsoft 登录和私人 API 后即可使用。</p>
+          <a
+            href="https://github.com/MuyangAmigo/FinTracker#deployment"
+            target="_blank"
+            rel="noreferrer"
+          >
+            配置说明 <Icon name="arrow" size={14} />
+          </a>
+        </div>
+      )}
+    </>
+  );
 }
 function Empty({ title, text }: { title: string; text: string }) {
   return (
@@ -209,7 +348,12 @@ export function FinanceApp({ page }: { page: Page }) {
     }
   };
   async function signIn() {
-    if (!auth.current) return;
+    if (!auth.current) {
+      setError("登录尚未就绪，请稍后重试");
+      return;
+    }
+    setBusy(true);
+    setError("");
     try {
       await auth.current.loginRedirect({
         scopes: [publicConfig.scope],
@@ -217,6 +361,8 @@ export function FinanceApp({ page }: { page: Page }) {
       });
     } catch (e) {
       setError(message(e));
+    } finally {
+      setBusy(false);
     }
   }
   async function download(kind: string) {
@@ -260,59 +406,41 @@ export function FinanceApp({ page }: { page: Page }) {
     }
   };
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Link href="/" className="brand">
-          <span className="brand-mark">
-            <Icon name="wallet" size={23} />
-          </span>
-          <span>
-            FinTracker<small>一起，积累好生活</small>
-          </span>
-        </Link>
-        <div className="space-label">家庭财务空间</div>
-        <nav aria-label="主导航">
-          {nav.map((item) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              className={`nav-item ${page === item.id ? "active" : ""}`}
-              aria-current={page === item.id ? "page" : undefined}
-              onClick={(e) => {
-                if (!guardNavigation()) e.preventDefault();
-              }}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-              {page === item.id && <span className="nav-dot" />}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-note">
-          <span className="note-leaf">↗</span>
-          <strong>小记录，大积累</strong>
-          <p>
-            不必记下每一笔，
-            <br />
-            每月认真回顾一次就好。
-          </p>
-        </div>
-        <div className="sidebar-bottom">
-          <div className="avatar">家</div>
-          <div>
-            <strong>家庭账本</strong>
-            <small>{signedIn ? "私人共享空间" : "登录后查看记录"}</small>
-          </div>
-          <Icon name="lock" size={16} />
-        </div>
-      </aside>
+    <div className={`app-shell${signedIn ? "" : " guest-shell"}`}>
+      {signedIn && (
+        <aside className="sidebar">
+          <Brand />
+          <div className="space-label">家庭财务空间</div>
+          <nav aria-label="主导航">
+            {nav.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`nav-item ${page === item.id ? "active" : ""}`}
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={(e) => {
+                  if (!guardNavigation()) e.preventDefault();
+                }}
+              >
+                <Icon name={item.icon} />
+                {item.label}
+                {page === item.id && <span className="nav-dot" />}
+              </Link>
+            ))}
+          </nav>
+        </aside>
+      )}
       <div className="workspace">
         <header className="topbar">
-          <span>
-            <span className="status-dot" />
-            {signedIn ? "私人数据 · 仅限家庭成员" : "家庭财务，简单一点"}
-          </span>
-          <div>
+          {signedIn ? (
+            <span>
+              <span className="status-dot" />
+              私人数据 · 仅限家庭成员
+            </span>
+          ) : (
+            <Brand />
+          )}
+          <div className="topbar-actions">
             {signedIn ? (
               <button
                 className="text-button"
@@ -327,49 +455,59 @@ export function FinanceApp({ page }: { page: Page }) {
               </button>
             ) : (
               <button
-                className="text-button"
-                disabled={!configured || loading}
+                className="primary-button login-button"
+                disabled={!configured || loading || busy}
+                aria-busy={loading || busy}
                 onClick={() => void signIn()}
               >
-                Microsoft 登录 <Icon name="arrow" size={16} />
+                <Icon name="lock" size={15} />
+                {busy ? "正在跳转…" : "Microsoft 登录"}
+                <Icon name="arrow" size={16} />
               </button>
             )}
           </div>
         </header>
-        <main>
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">YOUR HOME, YOUR FINANCES</div>
-              <h1>{titles[page][0]}</h1>
-              <p>{titles[page][1]}</p>
-            </div>
-            <button
-              className="primary-button"
-              disabled={!store || busy}
-              onClick={() =>
-                page === "assets"
-                  ? open("balance")
+        <main className={signedIn ? undefined : "landing-main"}>
+          {signedIn && (
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">YOUR HOME, YOUR FINANCES</div>
+                <h1>{titles[page][0]}</h1>
+                <p>{titles[page][1]}</p>
+              </div>
+              <button
+                className="primary-button"
+                disabled={!store || busy}
+                onClick={() =>
+                  page === "assets"
+                    ? open("balance")
+                    : page === "accounts"
+                      ? open("account")
+                      : open("income")
+                }
+              >
+                <Icon name="plus" size={18} />
+                {page === "assets"
+                  ? "登记资产"
                   : page === "accounts"
-                    ? open("account")
-                    : open("income")
-              }
-            >
-              <Icon name="plus" size={18} />
-              {page === "assets"
-                ? "登记资产"
-                : page === "accounts"
-                  ? "新增账户"
-                  : "新增收入来源"}
-            </button>
-          </div>
+                    ? "新增账户"
+                    : "新增收入来源"}
+              </button>
+            </div>
+          )}
           {error && (
             <div className="alert error" role="alert">
               {error}
               <button
                 className="text-button"
-                onClick={() => void refresh().catch((e: unknown) => setError(message(e)))}
+                disabled={!signedIn && (!configured || loading || busy)}
+                onClick={() =>
+                  signedIn
+                    ? void refresh().catch((e: unknown) => setError(message(e)))
+                    : void signIn()
+                }
               >
-                重新加载
+                {signedIn ? "重新加载" : "重试登录"}
               </button>
             </div>
           )}
@@ -378,268 +516,242 @@ export function FinanceApp({ page }: { page: Page }) {
               {notice}
             </div>
           )}
-          {!configured && (
-            <div className="setup-banner">
-              <Icon name="lock" />
-              <div>
-                <strong>私人账本等待连接</strong>
-                <p>
-                  界面已准备好。需配置 Microsoft 登录和私人
-                  API，才可查看或保存真实记录。财务数据不会发布到 GitHub Pages。
-                </p>
-              </div>
-              <a
-                href="https://github.com/MuyangAmigo/FinTracker#deployment"
-                target="_blank"
-                rel="noreferrer"
-              >
-                配置说明 <Icon name="arrow" size={16} />
-              </a>
-            </div>
-          )}
-          {configured && !signedIn && !loading && (
-            <div className="setup-banner">
-              <Icon name="lock" />
-              <div>
-                <strong>这是你们的私人财务空间</strong>
-                <p>使用获准的 Microsoft 账户登录，查看家庭记录。</p>
-              </div>
-              <button className="primary-button" onClick={() => void signIn()}>
-                登录并打开账本
-              </button>
-            </div>
-          )}
           {loading && (
             <div role="status" className="alert">
               正在安全加载记录…
             </div>
           )}
-          <div className="filter-bar">
-            <div className="segmented">
-              <span className="selected">月度视图</span>
-              <span className="filter-caption">CNY · 人民币</span>
-            </div>
-            <div className="filters">
-              <label>
-                <span className="sr-only">记录月份</span>
-                <input
-                  type="month"
-                  value={month}
-                  onChange={(e) => {
-                    if (e.target.value && guardNavigation()) {
-                      setMonth(e.target.value);
-                      setDirty(false);
-                    }
-                  }}
-                />
-              </label>
-              <label>
-                <span className="sr-only">归属筛选</span>
-                <select value={owner} onChange={(e) => setOwner(e.target.value)}>
-                  <option value="ALL">全部家庭成员</option>
-                  {store?.people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                  <option value="SHARED">共同账户</option>
-                </select>
-              </label>
-            </div>
-          </div>
-          {page === "dashboard" && (
+          {!signedIn ? (
+            <Landing />
+          ) : (
             <>
-              <div className="metrics">
-                <Metric
-                  label="本月收入"
-                  value={flow && incomeRecorded ? money(flow.income) : "—"}
-                  note={period?.incomeComplete ? "本月收入已完成" : "收入尚未完成"}
-                  icon="down"
-                  tone="green"
-                />
-                <Metric
-                  label="本月支出"
-                  value={flow && expenseRecorded ? money(flow.expense) : "—"}
-                  note={period?.expenseComplete ? "本月支出已完成" : "支出尚未完成"}
-                  icon="up"
-                  tone="orange"
-                />
-                <Metric
-                  label={complete ? "本月结余" : "已记录差额"}
-                  value={
-                    flow && (incomeRecorded || expenseRecorded)
-                      ? money(flow.savings)
-                      : "—"
-                  }
-                  note={
-                    flow
-                      ? `储蓄率 ${savingsRate(flow.income, flow.expense, complete) ?? "暂不适用"}`
-                      : "收入 − 支出"
-                  }
-                  icon="wallet"
-                  tone="blue"
-                />
-                <Metric
-                  label="资产总览"
-                  value={store && latest.length ? money(assetTotal) : "—"}
-                  note={
-                    latest.length
-                      ? `${latest.length} 个已登记资产 · 含历史估值`
-                      : "按最近一次余额汇总"
-                  }
-                  icon="grid"
-                  tone="purple"
-                />
+              <div className="filter-bar">
+                <div className="segmented">
+                  <span className="selected">月度视图</span>
+                  <span className="filter-caption">CNY · 人民币</span>
+                </div>
+                <div className="filters">
+                  <label>
+                    <span className="sr-only">记录月份</span>
+                    <input
+                      type="month"
+                      value={month}
+                      onChange={(e) => {
+                        if (e.target.value && guardNavigation()) {
+                          setMonth(e.target.value);
+                          setDirty(false);
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span className="sr-only">归属筛选</span>
+                    <select value={owner} onChange={(e) => setOwner(e.target.value)}>
+                      <option value="ALL">全部家庭成员</option>
+                      {store?.people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                      <option value="SHARED">共同账户</option>
+                    </select>
+                  </label>
+                </div>
               </div>
-              {!complete && store && (
-                <p className="data-warning">
-                  本月记录不完整，结余为已记录数据的差额；不能代表完整月度结余。
-                </p>
+              {page === "dashboard" && (
+                <>
+                  <div className="metrics">
+                    <Metric
+                      label="本月收入"
+                      value={flow && incomeRecorded ? money(flow.income) : "—"}
+                      note={period?.incomeComplete ? "本月收入已完成" : "收入尚未完成"}
+                      icon="down"
+                      tone="green"
+                    />
+                    <Metric
+                      label="本月支出"
+                      value={flow && expenseRecorded ? money(flow.expense) : "—"}
+                      note={period?.expenseComplete ? "本月支出已完成" : "支出尚未完成"}
+                      icon="up"
+                      tone="orange"
+                    />
+                    <Metric
+                      label={complete ? "本月结余" : "已记录差额"}
+                      value={
+                        flow && (incomeRecorded || expenseRecorded)
+                          ? money(flow.savings)
+                          : "—"
+                      }
+                      note={
+                        flow
+                          ? `储蓄率 ${savingsRate(flow.income, flow.expense, complete) ?? "暂不适用"}`
+                          : "收入 − 支出"
+                      }
+                      icon="wallet"
+                      tone="blue"
+                    />
+                    <Metric
+                      label="资产总览"
+                      value={store && latest.length ? money(assetTotal) : "—"}
+                      note={
+                        latest.length
+                          ? `${latest.length} 个已登记资产 · 含历史估值`
+                          : "按最近一次余额汇总"
+                      }
+                      icon="grid"
+                      tone="purple"
+                    />
+                  </div>
+                  {!complete && store && (
+                    <p className="data-warning">
+                      本月记录不完整，结余为已记录数据的差额；不能代表完整月度结余。
+                    </p>
+                  )}
+                  {annual && (
+                    <div className="annual-summary">
+                      <span>{month.slice(0, 4)} 年已记录汇总</span>
+                      <span>
+                        收入 <strong>{money(annual.income)}</strong>
+                      </span>
+                      <span>
+                        支出 <strong>{money(annual.expense)}</strong>
+                      </span>
+                      <span>
+                        结余 <strong>{money(annual.savings)}</strong>
+                      </span>
+                      <small>含未完成月份，非全年最终数值</small>
+                    </div>
+                  )}
+                  <div className="dashboard-grid">
+                    <section className="panel trend-panel">
+                      <PanelTitle
+                        title="收支趋势"
+                        subtitle="每月回顾，看见生活的节奏"
+                        right={
+                          <div className="legend">
+                            <i className="green" />
+                            收入 <i className="orange" />
+                            支出
+                          </div>
+                        }
+                      />
+                      {store && store.entries.length ? (
+                        <Trend store={store} year={month.slice(0, 4)} owner={owner} />
+                      ) : (
+                        <Empty
+                          title="等你记下第一个月"
+                          text="收入与支出会在这里汇成清晰的趋势。"
+                        />
+                      )}
+                      <div className="panel-footer">
+                        只展示已录入数据；未完成月份会标注。
+                        <Link href="/ledger/">
+                          开始月度记账 <Icon name="arrow" size={16} />
+                        </Link>
+                      </div>
+                    </section>
+                    <section className="panel">
+                      <PanelTitle title="资产分布" subtitle="看见每一份积累" />
+                      {store && latest.length ? (
+                        <Composition store={store} asOf={monthEnd(month)} owner={owner} />
+                      ) : (
+                        <Empty
+                          title="你的积累，从这里开始"
+                          text="登记账户余额，查看资产组成。"
+                        />
+                      )}
+                      <div className="panel-footer">
+                        <span>金融资产、房产及车辆</span>
+                        <Link href="/assets/">
+                          查看 <Icon name="arrow" size={16} />
+                        </Link>
+                      </div>
+                    </section>
+                  </div>
+                  <section className="panel">
+                    <PanelTitle
+                      title="本月账户支出"
+                      subtitle="个人与共同账户，一目了然"
+                      right={
+                        <Link className="subtle-link" href="/ledger/">
+                          查看全部 <Icon name="arrow" size={16} />
+                        </Link>
+                      }
+                    />
+                    {store ? (
+                      <Spending store={store} month={month} owner={owner} />
+                    ) : (
+                      <Empty
+                        title="还没有可显示的记录"
+                        text="登录后，真实的账户月度支出会显示在这里。"
+                      />
+                    )}
+                  </section>
+                </>
               )}
-              {annual && (
-                <div className="annual-summary">
-                  <span>{month.slice(0, 4)} 年已记录汇总</span>
-                  <span>
-                    收入 <strong>{money(annual.income)}</strong>
-                  </span>
-                  <span>
-                    支出 <strong>{money(annual.expense)}</strong>
-                  </span>
-                  <span>
-                    结余 <strong>{money(annual.savings)}</strong>
-                  </span>
-                  <small>含未完成月份，非全年最终数值</small>
+              {page === "ledger" &&
+                (store ? (
+                  <Ledger
+                    key={`${month}:${period?.version ?? 0}`}
+                    store={store}
+                    month={month}
+                    owner={owner}
+                    mutate={mutate}
+                    busy={busy}
+                    onDirty={setDirty}
+                    onAddAccount={() => open("account")}
+                    onAddIncome={() => open("income")}
+                  />
+                ) : (
+                  <section className="panel">
+                    <Empty
+                      title="月度记账"
+                      text="登录并连接私人 API 后，即可批量录入每个月的收入与账户支出。"
+                    />
+                  </section>
+                ))}
+              {page === "assets" &&
+                (store ? (
+                  <Assets
+                    store={store}
+                    month={month}
+                    owner={owner}
+                    onRecord={() => open("balance")}
+                  />
+                ) : (
+                  <section className="panel">
+                    <Empty
+                      title="资产管理"
+                      text="登记实际资产余额，保留每一次估值的历史。"
+                    />
+                  </section>
+                ))}
+              {page === "accounts" &&
+                (store ? (
+                  <Accounts
+                    store={store}
+                    onEdit={(a) => open("account", a)}
+                    onAdd={() => open("account")}
+                    onIncome={() => open("income")}
+                  />
+                ) : (
+                  <section className="panel">
+                    <Empty
+                      title="你的账户，你来定义"
+                      text="信用卡、公用小荷包、存款、投资、房产和车辆，都能在这里管理。"
+                    />
+                  </section>
+                ))}
+              {store && (
+                <div className="export-bar">
+                  <span>你的记录，始终由你掌握。</span>
+                  <button onClick={() => void download("monthly")}>导出月度收支</button>
+                  <button onClick={() => void download("assets")}>导出资产历史</button>
+                  <button onClick={() => void download("backup")}>完整数据备份</button>
                 </div>
               )}
-              <div className="dashboard-grid">
-                <section className="panel trend-panel">
-                  <PanelTitle
-                    title="收支趋势"
-                    subtitle="每月回顾，看见生活的节奏"
-                    right={
-                      <div className="legend">
-                        <i className="green" />
-                        收入 <i className="orange" />
-                        支出
-                      </div>
-                    }
-                  />
-                  {store && store.entries.length ? (
-                    <Trend store={store} year={month.slice(0, 4)} owner={owner} />
-                  ) : (
-                    <Empty
-                      title="等你记下第一个月"
-                      text="收入与支出会在这里汇成清晰的趋势。"
-                    />
-                  )}
-                  <div className="panel-footer">
-                    只展示已录入数据；未完成月份会标注。
-                    <Link href="/ledger/">
-                      开始月度记账 <Icon name="arrow" size={16} />
-                    </Link>
-                  </div>
-                </section>
-                <section className="panel">
-                  <PanelTitle title="资产分布" subtitle="看见每一份积累" />
-                  {store && latest.length ? (
-                    <Composition store={store} asOf={monthEnd(month)} owner={owner} />
-                  ) : (
-                    <Empty
-                      title="你的积累，从这里开始"
-                      text="登记账户余额，查看资产组成。"
-                    />
-                  )}
-                  <div className="panel-footer">
-                    <span>金融资产、房产及车辆</span>
-                    <Link href="/assets/">
-                      查看 <Icon name="arrow" size={16} />
-                    </Link>
-                  </div>
-                </section>
-              </div>
-              <section className="panel">
-                <PanelTitle
-                  title="本月账户支出"
-                  subtitle="个人与共同账户，一目了然"
-                  right={
-                    <Link className="subtle-link" href="/ledger/">
-                      查看全部 <Icon name="arrow" size={16} />
-                    </Link>
-                  }
-                />
-                {store ? (
-                  <Spending store={store} month={month} owner={owner} />
-                ) : (
-                  <Empty
-                    title="还没有可显示的记录"
-                    text="登录后，真实的账户月度支出会显示在这里。"
-                  />
-                )}
-              </section>
             </>
           )}
-          {page === "ledger" &&
-            (store ? (
-              <Ledger
-                key={`${month}:${period?.version ?? 0}`}
-                store={store}
-                month={month}
-                owner={owner}
-                mutate={mutate}
-                busy={busy}
-                onDirty={setDirty}
-                onAddAccount={() => open("account")}
-                onAddIncome={() => open("income")}
-              />
-            ) : (
-              <section className="panel">
-                <Empty
-                  title="月度记账"
-                  text="登录并连接私人 API 后，即可批量录入每个月的收入与账户支出。"
-                />
-              </section>
-            ))}
-          {page === "assets" &&
-            (store ? (
-              <Assets
-                store={store}
-                month={month}
-                owner={owner}
-                onRecord={() => open("balance")}
-              />
-            ) : (
-              <section className="panel">
-                <Empty title="资产管理" text="登记实际资产余额，保留每一次估值的历史。" />
-              </section>
-            ))}
-          {page === "accounts" &&
-            (store ? (
-              <Accounts
-                store={store}
-                onEdit={(a) => open("account", a)}
-                onAdd={() => open("account")}
-                onIncome={() => open("income")}
-              />
-            ) : (
-              <section className="panel">
-                <Empty
-                  title="你的账户，你来定义"
-                  text="信用卡、公用小荷包、存款、投资、房产和车辆，都能在这里管理。"
-                />
-              </section>
-            ))}
-          {store && (
-            <div className="export-bar">
-              <span>你的记录，始终由你掌握。</span>
-              <button onClick={() => void download("monthly")}>导出月度收支</button>
-              <button onClick={() => void download("assets")}>导出资产历史</button>
-              <button onClick={() => void download("backup")}>完整数据备份</button>
-            </div>
-          )}
-          <footer className="page-footer">
-            FinTracker <span>为两个人，也为一个家。</span>
-            <span>数据存储于私人数据库，不在 GitHub Pages。</span>
-          </footer>
         </main>
       </div>
       {modal && store && (

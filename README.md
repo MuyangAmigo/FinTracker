@@ -20,6 +20,11 @@ GitHub Pages hosts public application code, not private data. It cannot run a
 database or a server API. Without configured authentication/backend, the site
 shows a setup notice and does not pretend to contain or save records.
 
+Signed-out visitors see a dedicated landing page on every finance route, with
+Microsoft sign-in in the top-right header. No empty financial reports, filters,
+or editing controls are shown before sign-in. Restoring a signed-in session opens
+the requested workspace; the shared sidebar contains navigation only.
+
 ## Development
 
 Use Node.js 22+ and pnpm 9:

@@ -2,21 +2,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FinanceApp } from "./finance-app";
+import { publicConfig } from "../lib/client";
 import type { Store } from "../shared/finance";
 import { monthInput, balanceInput } from "../shared/finance";
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), createAuth: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  configured: true,
+  request: vi.fn(),
+  createAuth: vi.fn(),
+  getAllAccounts: vi.fn(),
+  loginRedirect: vi.fn(),
+}));
 vi.mock("../lib/client", async () => {
   const actual = await vi.importActual<typeof import("../lib/client")>("../lib/client");
   return {
     ...actual,
-    configured: true,
+    get configured() {
+      return mocks.configured;
+    },
     request: mocks.request,
     createAuth: () => mocks.createAuth(),
   };
 });
 let store: Store;
 beforeEach(() => {
+  mocks.configured = true;
+  mocks.getAllAccounts.mockReturnValue([{ username: "synthetic" }]);
+  mocks.loginRedirect.mockResolvedValue(undefined);
   store = {
     people: [
       { id: "a", name: "Person A" },
@@ -84,10 +96,10 @@ beforeEach(() => {
   mocks.createAuth.mockReturnValue({
     initialize: async () => {},
     handleRedirectPromise: async () => null,
-    getAllAccounts: () => [{ username: "synthetic" }],
+    getAllAccounts: mocks.getAllAccounts,
     setActiveAccount: () => {},
     logoutRedirect: async () => {},
-    loginRedirect: async () => {},
+    loginRedirect: mocks.loginRedirect,
   });
   mocks.request.mockImplementation(
     async (_auth, path: string, method: string = "GET", body?: unknown) => {
@@ -114,6 +126,105 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("household interface", () => {
+  it.each(["dashboard", "ledger", "assets", "accounts"] as const)(
+    "shows the landing instead of an empty %s workspace when signed out",
+    async (page) => {
+      mocks.getAllAccounts.mockReturnValue([]);
+      const { container } = render(<FinanceApp page={page} />);
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Microsoft 登录" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+        "把生活过好，把账记清。",
+      );
+      expect(screen.getAllByRole("article")).toHaveLength(3);
+      expect(screen.queryByRole("navigation")).toBeNull();
+      expect(screen.queryByLabelText("记录月份")).toBeNull();
+      expect(screen.queryByRole("button", { name: "新增收入来源" })).toBeNull();
+      expect(
+        container.querySelector(
+          ".metrics, .setup-banner, .sidebar-note, .sidebar-bottom, footer",
+        ),
+      ).toBeNull();
+      expect(screen.getAllByRole("button")).toHaveLength(1);
+      expect(
+        screen
+          .getByRole("banner")
+          .contains(screen.getByRole("button", { name: "Microsoft 登录" })),
+      ).toBe(true);
+      expect(mocks.request).not.toHaveBeenCalled();
+    },
+  );
+  it("starts the existing Microsoft redirect flow from the header", async () => {
+    mocks.getAllAccounts.mockReturnValue([]);
+    render(<FinanceApp page="dashboard" />);
+    const login = screen.getByRole("button", { name: "Microsoft 登录" });
+    await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(login);
+    await waitFor(() =>
+      expect(mocks.loginRedirect).toHaveBeenCalledWith({
+        scopes: [publicConfig.scope],
+        prompt: "select_account",
+      }),
+    );
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it("keeps sign-in disabled while authentication initializes", async () => {
+    let finishInitialization = () => {};
+    const initialization = new Promise<void>((resolve) => {
+      finishInitialization = resolve;
+    });
+    mocks.getAllAccounts.mockReturnValue([]);
+    mocks.createAuth.mockReturnValue({
+      ...mocks.createAuth(),
+      initialize: () => initialization,
+    });
+    render(<FinanceApp page="dashboard" />);
+    const login = screen.getByRole("button", { name: "Microsoft 登录" });
+    expect((login as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("正在安全加载记录");
+    finishInitialization();
+    await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+  });
+  it("disables unavailable login and explains missing configuration", () => {
+    mocks.configured = false;
+    render(<FinanceApp page="dashboard" />);
+    expect(
+      (screen.getByRole("button", { name: "Microsoft 登录" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("登录服务尚未配置");
+    expect(screen.getByRole("link", { name: "配置说明" })).toBeTruthy();
+    expect(mocks.createAuth).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it("reports a sign-in failure and retries login instead of fetching records", async () => {
+    mocks.getAllAccounts.mockReturnValue([]);
+    mocks.loginRedirect.mockRejectedValueOnce(new Error("登录取消，请重试"));
+    render(<FinanceApp page="dashboard" />);
+    const login = screen.getByRole("button", { name: "Microsoft 登录" });
+    await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(login);
+    expect((await screen.findByRole("alert")).textContent).toContain("登录取消，请重试");
+    fireEvent.click(screen.getByRole("button", { name: "重试登录" }));
+    await waitFor(() => expect(mocks.loginRedirect).toHaveBeenCalledTimes(2));
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it("opens the real dashboard after restoring a signed-in session", async () => {
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("button", { name: "退出登录" });
+    expect(screen.getByRole("navigation", { name: "主导航" })).toBeTruthy();
+    expect(screen.getByLabelText("记录月份")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "本月账户支出" })).toBeTruthy();
+    expect(container.querySelector(".landing-hero")).toBeNull();
+    expect(container.querySelector(".sidebar-note, .sidebar-bottom, footer")).toBeNull();
+    await waitFor(() =>
+      expect(mocks.request).toHaveBeenCalledWith(expect.anything(), "bootstrap"),
+    );
+  });
   it("saves a monthly batch through the API and reloads persisted records", async () => {
     render(<FinanceApp page="ledger" />);
     await screen.findByLabelText("Salary 金额");
