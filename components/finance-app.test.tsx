@@ -155,6 +155,15 @@ describe("household interface", () => {
           .getByRole("banner")
           .contains(screen.getByRole("button", { name: "Microsoft 登录" })),
       ).toBe(true);
+      const login = screen.getByRole("button", { name: "Microsoft 登录" });
+      expect(login.textContent).toBe("");
+      expect(login.getAttribute("title")).toBe("Microsoft 登录");
+      expect(login.querySelectorAll("svg")).toHaveLength(1);
+      expect(login.querySelector("svg circle")).not.toBeNull();
+      expect(
+        screen.queryByText("右上角使用 Microsoft 账户登录，仅限获准的家庭成员。"),
+      ).toBeNull();
+      expect(screen.queryByRole("link", { name: "从这里，了解我们的账本" })).toBeNull();
       expect(mocks.request).not.toHaveBeenCalled();
     },
   );
@@ -188,6 +197,26 @@ describe("household interface", () => {
     expect(screen.getByRole("status").textContent).toContain("正在安全加载记录");
     finishInitialization();
     await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+  });
+  it("labels and disables the profile button while redirecting", async () => {
+    let finishRedirect = () => {};
+    mocks.getAllAccounts.mockReturnValue([]);
+    mocks.loginRedirect.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRedirect = resolve;
+      }),
+    );
+    render(<FinanceApp page="dashboard" />);
+    const login = screen.getByRole("button", { name: "Microsoft 登录" });
+    await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(login);
+    expect(screen.getByRole("button", { name: "正在跳转…" })).toBe(login);
+    expect(login.getAttribute("aria-busy")).toBe("true");
+    expect((login as HTMLButtonElement).disabled).toBe(true);
+    finishRedirect();
+    await waitFor(() => expect((login as HTMLButtonElement).disabled).toBe(false));
+    expect(login.getAttribute("aria-label")).toBe("Microsoft 登录");
+    expect(login.getAttribute("aria-busy")).toBe("false");
   });
   it("disables unavailable login and explains missing configuration", () => {
     mocks.configured = false;

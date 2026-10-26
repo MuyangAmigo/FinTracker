@@ -49,15 +49,24 @@ try {
       const loginBox = await login.boundingBox();
       if (!loginBox || loginBox.x + loginBox.width / 2 < width / 2)
         throw new Error(`Login is not in the top-right header at ${width}px`);
+      if (loginBox.width !== 44 || loginBox.height !== 44)
+        throw new Error(`Profile login must have a 44px touch target at ${width}px`);
+      if ((await login.textContent()) !== "")
+        throw new Error(`Profile login must be icon-only: ${path}`);
+      if (!(await login.locator("svg circle").isVisible()))
+        throw new Error(`Profile icon is not visible at ${width}px: ${path}`);
+      if (
+        (await page.locator(".landing-access, .landing-explore").count()) ||
+        (await page
+          .getByText("右上角使用 Microsoft 账户登录，仅限获准的家庭成员。")
+          .count()) ||
+        (await page.getByRole("link", { name: "从这里，了解我们的账本" }).count())
+      )
+        throw new Error(`Removed landing content is still present: ${path}`);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth,
       );
       if (overflow) throw new Error(`Page overflow at ${width}px: ${path}`);
-      if (path === "/") {
-        await page.getByRole("link", { name: "从这里，了解我们的账本" }).click();
-        if (!page.url().endsWith("#landing-features"))
-          throw new Error("Landing feature link did not navigate");
-      }
       if (path === "/" && (width === 1440 || width === 390))
         await page.screenshot({
           path: resolve(join(directory, `preview-${width}.png`)),
@@ -67,7 +76,7 @@ try {
   }
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Signed-out landing, header login, feature link, and removed workspace UI passed on all four routes at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
+    "Signed-out landing, profile login, and removed landing/workspace UI passed on all four routes at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
   );
 } finally {
   await browser.close();
