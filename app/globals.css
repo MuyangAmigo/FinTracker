@@ -904,8 +904,17 @@ main {
   align-items: center;
 }
 .login-button {
-  min-height: 44px;
-  gap: 10px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: #ecf5ef;
+  color: var(--green);
+}
+.login-button:hover:not(:disabled) {
+  background: #dceee3;
 }
 .landing-main {
   max-width: 1264px;
@@ -947,37 +956,6 @@ main {
   font-size: 15px;
   line-height: 2;
   color: var(--muted);
-}
-.landing-explore {
-  display: inline-flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 32px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--green);
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 600;
-}
-.landing-explore svg {
-  transition: transform 160ms ease;
-}
-.landing-explore:hover svg {
-  transform: translateX(4px);
-}
-.landing-access {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin-top: 22px;
-  max-width: 340px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.8;
-}
-.landing-access svg {
-  flex-shrink: 0;
-  margin-top: 3px;
 }
 .landing-visual {
   position: relative;
@@ -1218,14 +1196,6 @@ main {
     width: 32px;
     height: 34px;
     border-radius: 10px;
-  }
-  .login-button {
-    padding: 10px;
-    font-size: 11px;
-    gap: 7px;
-  }
-  .login-button > svg:first-child {
-    display: none;
   }
   .landing-main {
     padding: 32px 24px;

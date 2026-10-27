@@ -92,6 +92,12 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
         <path d="M8 10V7a4 4 0 0 1 8 0v3" />
       </>
     ),
+    profile: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+      </>
+    ),
     home: (
       <>
         <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
@@ -150,13 +156,6 @@ function Landing() {
             每月一起理清收支，看看积累，
             <br />
             为想要的生活，留一份从容。
-          </p>
-          <a className="landing-explore" href="#landing-features">
-            从这里，了解我们的账本 <Icon name="arrow" size={18} />
-          </a>
-          <p className="landing-access">
-            <Icon name="lock" size={14} />
-            右上角使用 Microsoft 账户登录，仅限获准的家庭成员。
           </p>
         </div>
         <div className="landing-visual" aria-hidden="true">
@@ -455,14 +454,14 @@ export function FinanceApp({ page }: { page: Page }) {
               </button>
             ) : (
               <button
-                className="primary-button login-button"
+                className="login-button"
                 disabled={!configured || loading || busy}
                 aria-busy={loading || busy}
+                aria-label={busy ? "正在跳转…" : "Microsoft 登录"}
+                title={busy ? "正在跳转…" : "Microsoft 登录"}
                 onClick={() => void signIn()}
               >
-                <Icon name="lock" size={15} />
-                {busy ? "正在跳转…" : "Microsoft 登录"}
-                <Icon name="arrow" size={16} />
+                <Icon name="profile" size={22} />
               </button>
             )}
           </div>
