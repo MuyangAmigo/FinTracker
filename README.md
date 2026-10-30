@@ -31,8 +31,11 @@ loaded records instead of repeating Microsoft initialization and downloading the
 whole household again. Successful saves reload server records and versions.
 Entering another route reloads records older than one minute before editing;
 version checks still reject stale writes.
-Signing out clears the in-memory records; no finance data is cached in browser
-storage. Large API JSON responses use gzip when requested, with `no-store`
+Signing out or receiving 401/403 from any API call, including saves and exports,
+clears the in-memory records and invalidates pending loads. A transient reload
+failure keeps the last successful timestamp, so entering another route retries
+stale records. No finance data is cached in browser storage.
+Large API JSON responses use gzip when requested, with `no-store`
 preserved. The API compression change requires a separate backend deployment.
 
 ## Development

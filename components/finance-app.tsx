@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { configured, publicConfig, request } from "../lib/client";
+import { configured, publicConfig } from "../lib/client";
 import { useFinanceSession } from "./finance-session";
 import {
   accountTypes,
@@ -258,8 +258,17 @@ function message(error: unknown) {
 }
 
 export function FinanceApp({ page }: { page: Page }) {
-  const { auth, signedIn, loading, store, error, setError, refresh, signOut } =
-    useFinanceSession();
+  const {
+    auth,
+    signedIn,
+    loading,
+    store,
+    error,
+    setError,
+    apiRequest,
+    refresh,
+    signOut,
+  } = useFinanceSession();
   const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(today().slice(0, 7)),
     [owner, setOwner] = useState("ALL");
@@ -282,7 +291,7 @@ export function FinanceApp({ page }: { page: Page }) {
     setError("");
     setNotice("");
     try {
-      await request(auth.current, path, method, body);
+      await apiRequest(path, method, body);
       setDirty(false);
       setModal(null);
       setEditing(undefined);
@@ -320,7 +329,7 @@ export function FinanceApp({ page }: { page: Page }) {
   async function download(kind: string) {
     if (!auth.current) return;
     try {
-      const response = await request(auth.current, `export/${kind}`);
+      const response = await apiRequest(`export/${kind}`);
       const blob = await response.blob(),
         url = URL.createObjectURL(blob);
       const link = document.createElement("a");

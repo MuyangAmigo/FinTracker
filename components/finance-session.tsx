@@ -24,15 +24,35 @@ function useSession() {
   const [store, setStore] = useState<Store | null>(null);
   const [error, setError] = useState("");
 
-  const refresh = useCallback(async (afterSave = false) => {
-    const client = auth.current;
-    if (!client) throw new Error("登录尚未就绪");
-    if (pending.current && !afterSave) return pending.current;
-    if (afterSave) generation.current++;
-    const currentGeneration = generation.current;
-    const load = (async () => {
+  const invalidate = useCallback(() => {
+    generation.current++;
+    pending.current = null;
+    loadedAt.current = 0;
+    setStore(null);
+  }, []);
+
+  const apiRequest = useCallback(
+    async (path: string, method = "GET", body?: unknown) => {
+      const client = auth.current;
+      if (!client) throw new Error("登录尚未就绪");
       try {
-        const response = await request(client, "bootstrap");
+        return await request(client, path, method, body);
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403))
+          invalidate();
+        throw error;
+      }
+    },
+    [invalidate],
+  );
+
+  const refresh = useCallback(
+    async (afterSave = false) => {
+      if (pending.current && !afterSave) return pending.current;
+      if (afterSave) generation.current++;
+      const currentGeneration = generation.current;
+      const load = (async () => {
+        const response = await apiRequest("bootstrap");
         const raw: unknown = await response.json();
         const value = storeSchema.parse(raw);
         if (generation.current === currentGeneration) {
@@ -40,27 +60,19 @@ function useSession() {
           loadedAt.current = Date.now();
           setError("");
         }
-      } catch (error) {
-        if (
-          generation.current === currentGeneration &&
-          error instanceof ApiError &&
-          (error.status === 401 || error.status === 403)
-        )
-          setStore(null);
-        throw error;
+      })();
+      pending.current = load;
+      try {
+        await load;
+      } finally {
+        if (pending.current === load) pending.current = null;
       }
-    })();
-    pending.current = load;
-    try {
-      await load;
-    } finally {
-      if (pending.current === load) pending.current = null;
-    }
-  }, []);
+    },
+    [apiRequest],
+  );
 
   const refreshIfStale = useCallback(async () => {
     if (!loadedAt.current || Date.now() - loadedAt.current < 60_000) return;
-    loadedAt.current = 0;
     setStore(null);
     setLoading(true);
     try {
@@ -100,10 +112,7 @@ function useSession() {
   }, [refresh]);
 
   const signOut = async () => {
-    generation.current++;
-    pending.current = null;
-    loadedAt.current = 0;
-    setStore(null);
+    invalidate();
     setSignedIn(false);
     setError("");
     await auth.current?.logoutRedirect();
@@ -116,6 +125,7 @@ function useSession() {
     store,
     error,
     setError,
+    apiRequest,
     refresh,
     refreshIfStale,
     signOut,

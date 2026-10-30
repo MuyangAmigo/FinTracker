@@ -172,6 +172,28 @@ describe("household interface", () => {
     await waitFor(() => expect(mocks.request).toHaveBeenCalledTimes(2));
     expect(mocks.createAuth).toHaveBeenCalledTimes(1);
   });
+  it.each([new Error("网络连接失败"), new ApiError(503, "服务暂时不可用")])(
+    "retries stale records on the next route after %s",
+    async (failure) => {
+      const now = Date.now();
+      const view = render(<FinanceApp key="dashboard" page="dashboard" />);
+      await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+      vi.spyOn(Date, "now").mockReturnValue(now + 61_000);
+      mocks.request.mockRejectedValueOnce(failure);
+      view.rerender(<FinanceApp key="ledger" page="ledger" />);
+      expect((await screen.findByRole("alert")).textContent).toContain(failure.message);
+      expect(screen.queryByLabelText("Salary 金额")).toBeNull();
+      expect(mocks.request).toHaveBeenCalledTimes(2);
+
+      view.rerender(<FinanceApp key="assets" page="assets" />);
+      await screen.findAllByText("Bank A");
+      expect(mocks.request).toHaveBeenCalledTimes(3);
+      expect(screen.queryByRole("alert")).toBeNull();
+      view.rerender(<FinanceApp key="ledger-again" page="ledger" />);
+      expect(screen.getByLabelText("Salary 金额")).toBeTruthy();
+      expect(mocks.request).toHaveBeenCalledTimes(3);
+    },
+  );
   it("does not restore records from a pending load after signing out", async () => {
     let finishLoad: (response: Response) => void = () => {};
     mocks.request.mockReturnValueOnce(
@@ -196,12 +218,61 @@ describe("household interface", () => {
   it("removes cached records if access is revoked during a refresh", async () => {
     render(<FinanceApp page="ledger" />);
     await screen.findByLabelText("Salary 金额");
-    mocks.request.mockRejectedValue(new ApiError(403, "访问权限已撤销"));
+    mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
     fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
     await screen.findAllByRole("alert");
+    mocks.request.mockRejectedValueOnce(new ApiError(403, "访问权限已撤销"));
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
     await waitFor(() => expect(screen.queryByLabelText("Salary 金额")).toBeNull());
     expect(screen.getByRole("alert").textContent).toContain("访问权限已撤销");
+  });
+  it.each([401, 403])(
+    "clears cached records and invalidates pending loads when a save returns %s",
+    async (status) => {
+      const view = render(<FinanceApp key="ledger" page="ledger" />);
+      await screen.findByLabelText("Salary 金额");
+      mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
+      fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+      await screen.findByRole("button", { name: "重新加载" });
+
+      const oldResponse = JSON.stringify(store);
+      let finishLoad: (response: Response) => void = () => {};
+      mocks.request.mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishLoad = resolve;
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+      mocks.request.mockRejectedValueOnce(new ApiError(status, "访问权限已撤销"));
+      fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+      await waitFor(() => expect(screen.queryByLabelText("Salary 金额")).toBeNull());
+      expect(screen.getByRole("alert").textContent).toContain("访问权限已撤销");
+
+      await act(async () => finishLoad(new Response(oldResponse)));
+      expect(screen.queryByLabelText("Salary 金额")).toBeNull();
+      const calls = mocks.request.mock.calls.length;
+      view.rerender(<FinanceApp key="assets" page="assets" />);
+      expect(screen.queryByText("Bank A")).toBeNull();
+      expect(mocks.request).toHaveBeenCalledTimes(calls);
+    },
+  );
+  it.each(
+    [401, 403].flatMap((status) =>
+      ["导出月度收支", "导出资产历史", "完整数据备份"].map((button) => ({
+        status,
+        button,
+      })),
+    ),
+  )("clears cached records when $button returns $status", async ({ status, button }) => {
+    const view = render(<FinanceApp key="ledger" page="ledger" />);
+    await screen.findByLabelText("Salary 金额");
+    mocks.request.mockRejectedValueOnce(new ApiError(status, "访问权限已撤销"));
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    await waitFor(() => expect(screen.queryByLabelText("Salary 金额")).toBeNull());
+    expect(screen.getByRole("alert").textContent).toContain("访问权限已撤销");
+    view.rerender(<FinanceApp key="assets" page="assets" />);
+    expect(screen.queryByText("Bank A")).toBeNull();
+    expect(mocks.request).toHaveBeenCalledTimes(2);
   });
   it.each(["dashboard", "ledger", "assets", "accounts"] as const)(
     "shows the landing instead of an empty %s workspace when signed out",
@@ -328,7 +399,12 @@ describe("household interface", () => {
     expect(container.querySelector(".landing-hero")).toBeNull();
     expect(container.querySelector(".sidebar-note, .sidebar-bottom, footer")).toBeNull();
     await waitFor(() =>
-      expect(mocks.request).toHaveBeenCalledWith(expect.anything(), "bootstrap"),
+      expect(mocks.request).toHaveBeenCalledWith(
+        expect.anything(),
+        "bootstrap",
+        "GET",
+        undefined,
+      ),
     );
   });
   it("saves a monthly batch through the API and reloads persisted records", async () => {
