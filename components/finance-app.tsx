@@ -1,22 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import type { PublicClientApplication } from "@azure/msal-browser";
-import {
-  configured,
-  createAuth,
-  publicConfig,
-  request,
-  storeSchema,
-} from "../lib/client";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { configured, publicConfig } from "../lib/client";
+import { useFinanceSession } from "./finance-session";
 import {
   accountTypes,
   accountInput,
@@ -271,49 +258,24 @@ function message(error: unknown) {
 }
 
 export function FinanceApp({ page }: { page: Page }) {
-  const auth = useRef<PublicClientApplication | null>(null);
-  const [signedIn, setSignedIn] = useState(false),
-    [loading, setLoading] = useState(configured);
-  const [store, setStore] = useState<Store | null>(null),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+  const {
+    auth,
+    signedIn,
+    loading,
+    store,
+    error,
+    setError,
+    apiRequest,
+    refresh,
+    signOut,
+  } = useFinanceSession();
+  const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(today().slice(0, 7)),
     [owner, setOwner] = useState("ALL");
   const [modal, setModal] = useState<"account" | "income" | "balance" | null>(null),
     [editing, setEditing] = useState<Account | undefined>();
   const [busy, setBusy] = useState(false),
     [dirty, setDirty] = useState(false);
-  const refresh = useCallback(async () => {
-    if (!auth.current) throw new Error("登录尚未就绪");
-    const response = await request(auth.current, "bootstrap");
-    const raw: unknown = await response.json();
-    setStore(storeSchema.parse(raw));
-  }, []);
-  useEffect(() => {
-    if (!configured) return;
-    let active = true;
-    const client = createAuth();
-    auth.current = client;
-    void (async () => {
-      try {
-        await client.initialize();
-        const result = await client.handleRedirectPromise();
-        const account = result?.account ?? client.getAllAccounts()[0];
-        if (account) {
-          client.setActiveAccount(account);
-          if (active) setSignedIn(true);
-          await refresh();
-        }
-      } catch (e) {
-        if (active) setError(message(e));
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [refresh]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -329,12 +291,12 @@ export function FinanceApp({ page }: { page: Page }) {
     setError("");
     setNotice("");
     try {
-      await request(auth.current, path, method, body);
+      await apiRequest(path, method, body);
       setDirty(false);
       setModal(null);
       setEditing(undefined);
       try {
-        await refresh();
+        await refresh(true);
       } catch (e) {
         throw new Error(`已保存，但无法重新加载记录：${message(e)}`);
       }
@@ -367,7 +329,7 @@ export function FinanceApp({ page }: { page: Page }) {
   async function download(kind: string) {
     if (!auth.current) return;
     try {
-      const response = await request(auth.current, `export/${kind}`);
+      const response = await apiRequest(`export/${kind}`);
       const blob = await response.blob(),
         url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -445,9 +407,7 @@ export function FinanceApp({ page }: { page: Page }) {
                 className="text-button"
                 onClick={() => {
                   if (guardNavigation())
-                    void auth.current
-                      ?.logoutRedirect()
-                      .catch((e: unknown) => setError(message(e)));
+                    void signOut().catch((e: unknown) => setError(message(e)));
                 }}
               >
                 退出登录

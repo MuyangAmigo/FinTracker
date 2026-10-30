@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FinanceProvider } from "../components/finance-session";
 import "./globals.css";
 export const metadata: Metadata = {
   title: "FinTracker · 家庭财务",
@@ -9,7 +10,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <FinanceProvider>{children}</FinanceProvider>
+      </body>
     </html>
   );
 }

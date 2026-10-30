@@ -8,6 +8,10 @@ import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { authenticate, HttpError } from "./auth.js";
 import { execute } from "./service.js";
+import { gzip } from "node:zlib";
+import { promisify } from "node:util";
+
+const compress = promisify(gzip);
 
 export async function handler(
   request: HttpRequest,
@@ -21,7 +25,7 @@ export async function handler(
   const headers: Record<string, string> = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    Vary: "Origin",
+    Vary: "Origin, Accept-Encoding",
   };
   if (origin && !allowed.includes(origin))
     return { status: 403, headers, jsonBody: { error: "请求来源未获允许" } };
@@ -49,12 +53,26 @@ export async function handler(
         },
         body: result,
       };
+    const responseBody = JSON.stringify(result, (_, v: unknown) =>
+      typeof v === "bigint" ? v.toString() : v,
+    );
+    const acceptsGzip = (request.headers.get("accept-encoding") ?? "")
+      .split(",")
+      .some((encoding) => {
+        const match = encoding.match(
+          /^\s*gzip\s*(?:;\s*q\s*=\s*(0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?\s*$/i,
+        );
+        return match !== null && (match[1] === undefined || Number(match[1]) > 0);
+      });
+    const compressed = acceptsGzip && Buffer.byteLength(responseBody) >= 1024;
     return {
       status: 200,
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(result, (_, v: unknown) =>
-        typeof v === "bigint" ? v.toString() : v,
-      ),
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        ...(compressed ? { "Content-Encoding": "gzip" } : {}),
+      },
+      body: compressed ? await compress(responseBody) : responseBody,
     };
   } catch (error) {
     if (error instanceof HttpError)
