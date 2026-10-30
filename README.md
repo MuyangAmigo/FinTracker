@@ -26,6 +26,15 @@ No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
 the requested workspace; the shared sidebar contains navigation only.
 
+Finance routes share one authenticated, in-memory session. Navigation reuses the
+loaded records instead of repeating Microsoft initialization and downloading the
+whole household again. Successful saves reload server records and versions.
+Entering another route reloads records older than one minute before editing;
+version checks still reject stale writes.
+Signing out clears the in-memory records; no finance data is cached in browser
+storage. Large API JSON responses use gzip when requested, with `no-store`
+preserved. The API compression change requires a separate backend deployment.
+
 ## Development
 
 Use Node.js 22+ and pnpm 9:

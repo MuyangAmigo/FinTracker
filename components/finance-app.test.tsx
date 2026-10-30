@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { StrictMode, type ReactElement } from "react";
 import { FinanceApp } from "./finance-app";
-import { publicConfig } from "../lib/client";
+import { FinanceProvider } from "./finance-session";
+import { ApiError, publicConfig } from "../lib/client";
 import type { Store } from "../shared/finance";
 import { monthInput, balanceInput } from "../shared/finance";
 
@@ -25,6 +34,9 @@ vi.mock("../lib/client", async () => {
   };
 });
 let store: Store;
+function render(ui: ReactElement) {
+  return renderView(ui, { wrapper: FinanceProvider });
+}
 beforeEach(() => {
   mocks.configured = true;
   mocks.getAllAccounts.mockReturnValue([{ username: "synthetic" }]);
@@ -124,8 +136,73 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 describe("household interface", () => {
+  it("reuses the authenticated store when navigating between finance pages", async () => {
+    const view = render(<FinanceApp key="dashboard" page="dashboard" />);
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    view.rerender(<FinanceApp key="ledger" page="ledger" />);
+    expect(screen.getByLabelText("Salary 金额")).toBeTruthy();
+    view.rerender(<FinanceApp key="assets" page="assets" />);
+    expect(screen.getAllByText("Bank A").length).toBeGreaterThan(0);
+    expect(mocks.createAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("正在安全加载记录…")).toBeNull();
+  });
+  it("initializes and loads only once under Strict Mode", async () => {
+    renderView(
+      <StrictMode>
+        <FinanceProvider>
+          <FinanceApp page="ledger" />
+        </FinanceProvider>
+      </StrictMode>,
+    );
+    await screen.findByLabelText("Salary 金额");
+    expect(mocks.createAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+  });
+  it("revalidates records older than a minute when entering another route", async () => {
+    const now = Date.now();
+    const view = render(<FinanceApp key="dashboard" page="dashboard" />);
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    vi.spyOn(Date, "now").mockReturnValue(now + 61_000);
+    view.rerender(<FinanceApp key="ledger" page="ledger" />);
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledTimes(2));
+    expect(mocks.createAuth).toHaveBeenCalledTimes(1);
+  });
+  it("does not restore records from a pending load after signing out", async () => {
+    let finishLoad: (response: Response) => void = () => {};
+    mocks.request.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        finishLoad = resolve;
+      }),
+    );
+    render(<FinanceApp page="ledger" />);
+    fireEvent.click(await screen.findByRole("button", { name: "退出登录" }));
+    await act(async () => finishLoad(new Response(JSON.stringify(store))));
+    expect(screen.queryByLabelText("Salary 金额")).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
+  });
+  it("clears financial records before signing out", async () => {
+    render(<FinanceApp page="ledger" />);
+    await screen.findByLabelText("Salary 金额");
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    expect(screen.queryByLabelText("Salary 金额")).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByRole("button", { name: "Microsoft 登录" })).toBeTruthy();
+  });
+  it("removes cached records if access is revoked during a refresh", async () => {
+    render(<FinanceApp page="ledger" />);
+    await screen.findByLabelText("Salary 金额");
+    mocks.request.mockRejectedValue(new ApiError(403, "访问权限已撤销"));
+    fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+    await screen.findAllByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    await waitFor(() => expect(screen.queryByLabelText("Salary 金额")).toBeNull());
+    expect(screen.getByRole("alert").textContent).toContain("访问权限已撤销");
+  });
   it.each(["dashboard", "ledger", "assets", "accounts"] as const)(
     "shows the landing instead of an empty %s workspace when signed out",
     async (page) => {
@@ -272,6 +349,35 @@ describe("household interface", () => {
     expect(monthInput.parse(call?.[3]).entries[0].amount).toBe("123.45");
     expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
       "123.45",
+    );
+  });
+  it("reloads after a save even if an earlier refresh is still pending", async () => {
+    render(<FinanceApp page="ledger" />);
+    await screen.findByLabelText("Salary 金额");
+    fireEvent.change(screen.getByLabelText("记录月份"), { target: { value: "2024-01" } });
+    mocks.request.mockRejectedValueOnce(new Error("保存失败"));
+    fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+    await screen.findByRole("button", { name: "重新加载" });
+
+    const oldResponse = JSON.stringify(store);
+    let finishLoad: (response: Response) => void = () => {};
+    mocks.request.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        finishLoad = resolve;
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    fireEvent.change(screen.getByLabelText("Salary 金额"), {
+      target: { value: "234.56" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+    await screen.findByText("已保存");
+    expect(
+      mocks.request.mock.calls.filter((call) => call[1] === "bootstrap"),
+    ).toHaveLength(3);
+    await act(async () => finishLoad(new Response(oldResponse)));
+    expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
+      "234.56",
     );
   });
   it("uses the recorded shared owner instead of changed account metadata", async () => {
