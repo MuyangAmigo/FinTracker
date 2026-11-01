@@ -936,10 +936,15 @@ main {
   --muted: color-mix(in srgb, var(--ink) 75%, var(--canvas));
 }
 .guest-shell .workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
   width: 100%;
   margin-left: 0;
 }
 .guest-shell .topbar {
+  flex-shrink: 0;
   height: 96px;
   padding: 0 max(32px, calc((100vw - 1152px) / 2));
   background: var(--canvas);
@@ -962,6 +967,10 @@ main {
   background: #dceee3;
 }
 .landing-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
   max-width: 1264px;
   padding: 48px 56px 40px;
 }
@@ -1127,6 +1136,7 @@ main {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 48px;
+  margin-top: auto;
   border-top: 1px solid var(--border);
   padding-top: 32px;
   scroll-margin-top: 24px;
@@ -1134,7 +1144,7 @@ main {
 .landing-feature-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   color: var(--green);
   margin-bottom: 20px;
 }

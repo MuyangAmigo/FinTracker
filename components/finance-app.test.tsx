@@ -321,6 +321,11 @@ describe("household interface", () => {
         "把生活过好，把账记清。",
       );
       expect(screen.getAllByRole("article")).toHaveLength(3);
+      for (const [index, feature] of screen.getAllByRole("article").entries()) {
+        const top = feature.querySelector(".landing-feature-top")!;
+        expect(top.firstElementChild?.textContent).toBe(`0${index + 1}`);
+        expect(top.lastElementChild?.tagName.toLowerCase()).toBe("svg");
+      }
       expect(screen.queryByRole("navigation")).toBeNull();
       expect(screen.queryByLabelText("记录月份")).toBeNull();
       expect(screen.queryByRole("button", { name: "新增收入来源" })).toBeNull();

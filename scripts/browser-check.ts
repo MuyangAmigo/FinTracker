@@ -15,8 +15,17 @@ try {
   const page = await browser.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  for (const width of [1440, 1024, 893, 760, 390, 320]) {
-    await page.setViewportSize({ width, height: 1000 });
+  for (const { width, height } of [
+    { width: 1440, height: 1000 },
+    { width: 1389, height: 1305 },
+    { width: 1024, height: 1000 },
+    { width: 893, height: 1000 },
+    { width: 760, height: 1000 },
+    { width: 390, height: 1000 },
+    { width: 390, height: 1600 },
+    { width: 320, height: 1000 },
+  ]) {
+    await page.setViewportSize({ width, height });
     for (const path of ["/", "/ledger/", "/assets/", "/accounts/"]) {
       const response = await page.goto(`${root}${path}`);
       if (response?.status() !== 200) throw new Error(`Route failed: ${path}`);
@@ -38,6 +47,34 @@ try {
         throw new Error(`Expected one header login: ${path}`);
       if ((await page.locator(".landing-feature").count()) !== 3)
         throw new Error(`Missing landing features: ${path}`);
+      const layoutError = await page.evaluate(() => {
+        const main = document.querySelector<HTMLElement>(".landing-main")!;
+        const hero = document.querySelector<HTMLElement>(".landing-hero")!;
+        const features = document.querySelector<HTMLElement>(".landing-features")!;
+        const setup = document.querySelector<HTMLElement>(".landing-setup");
+        const mainBox = main.getBoundingClientRect();
+        const featuresBox = features.getBoundingClientRect();
+        const contentBottom = (setup ?? features).getBoundingClientRect().bottom;
+        const paddingBottom = parseFloat(getComputedStyle(main).paddingBottom);
+        if (Math.abs(mainBox.bottom - contentBottom - paddingBottom) > 1)
+          return "Feature row and setup notice are not at the page bottom";
+        if (mainBox.bottom < window.innerHeight - 1)
+          return "Landing page does not fill the viewport";
+        if (featuresBox.top < hero.getBoundingClientRect().bottom - 1)
+          return "Feature row overlaps the hero";
+        for (const feature of features.querySelectorAll(".landing-feature")) {
+          const top = feature.querySelector(".landing-feature-top")!;
+          const number = top.querySelector("span")!.getBoundingClientRect();
+          const icon = top.querySelector("svg")!.getBoundingClientRect();
+          if (
+            Math.abs(number.left - top.getBoundingClientRect().left) > 1 ||
+            number.right > icon.left
+          )
+            return "Feature number is not left-aligned before its icon";
+        }
+        return null;
+      });
+      if (layoutError) throw new Error(`${layoutError} at ${width}x${height}: ${path}`);
       if (
         await page
           .locator(
@@ -81,10 +118,14 @@ try {
         () => document.documentElement.scrollWidth > window.innerWidth,
       );
       if (overflow) throw new Error(`Page overflow at ${width}px: ${path}`);
-      if (path === "/" && (width === 1440 || width === 390))
+      if (
+        path === "/" &&
+        (width === 1440 || width === 1389 || (width === 390 && height === 1000))
+      )
         await page.screenshot({
           path: resolve(join(directory, `preview-${width}.png`)),
           fullPage: true,
+          animations: "disabled",
         });
     }
     const dialogBox = await page.evaluate(() => {
@@ -113,7 +154,7 @@ try {
   }
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Signed-out landing, profile login, and wide-dialog bounds passed at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
+    "Signed-out landing, bottom feature layout, left-aligned numbers, profile login, and wide-dialog bounds passed at desktop and mobile sizes without page errors or horizontal overflow.",
   );
 } finally {
   await browser.close();
