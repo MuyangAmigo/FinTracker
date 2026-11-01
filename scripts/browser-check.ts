@@ -30,15 +30,6 @@ try {
           );
         });
       await page.locator(".landing-hero").waitFor();
-      if (path === "/" && width === 1440) {
-        const icon = page.locator('link[rel="icon"]');
-        const href = await icon.getAttribute("href");
-        const expected = `${new URL(root).pathname.replace(/\/$/, "")}/favicon.png`;
-        if (!href || new URL(href, root).pathname !== expected)
-          throw new Error("Favicon does not respect the configured base path");
-        if ((await page.request.get(new URL(href, root).href)).status() !== 200)
-          throw new Error("Favicon image is unavailable");
-      }
       const login = page.getByRole("banner").getByRole("button", {
         name: "Microsoft 登录",
       });
@@ -56,14 +47,28 @@ try {
       )
         throw new Error(`Signed-out page contains workspace UI: ${path}`);
       const loginBox = await login.boundingBox();
-      if (!loginBox || loginBox.x + loginBox.width / 2 < width / 2)
-        throw new Error(`Login is not in the top-right header at ${width}px`);
+      const brandBox = await page
+        .getByRole("link", { name: "FinTracker 首页" })
+        .boundingBox();
+      if (
+        !loginBox ||
+        !brandBox ||
+        brandBox.x < loginBox.x + loginBox.width ||
+        brandBox.x - loginBox.x - loginBox.width > 20
+      )
+        throw new Error(`Login is not beside the brand at ${width}px`);
       if (loginBox.width !== 44 || loginBox.height !== 44)
         throw new Error(`Profile login must have a 44px touch target at ${width}px`);
       if ((await login.textContent()) !== "")
         throw new Error(`Profile login must be icon-only: ${path}`);
-      if (!(await login.locator(".profile-avatar").isVisible()))
-        throw new Error(`Travel Log avatar is not visible at ${width}px: ${path}`);
+      const avatar = login.locator("img.profile-avatar");
+      if (
+        !(await avatar.isVisible()) ||
+        !(await avatar.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+        ))
+      )
+        throw new Error(`Personal avatar is not visible at ${width}px: ${path}`);
       if (
         (await page.locator(".landing-access, .landing-explore").count()) ||
         (await page
@@ -82,10 +87,33 @@ try {
           fullPage: true,
         });
     }
+    const dialogBox = await page.evaluate(() => {
+      const dialog = document.createElement("dialog");
+      dialog.className = "modal modal-wide";
+      dialog.textContent = "Synthetic monthly dialog layout check";
+      document.body.append(dialog);
+      try {
+        dialog.showModal();
+        const box = dialog.getBoundingClientRect();
+        return { width: box.width, left: box.left, right: box.right };
+      } finally {
+        dialog.close();
+        dialog.remove();
+      }
+    });
+    const expectedDialogWidth = Math.min(1040, width - 32);
+    if (
+      Math.abs(dialogBox.width - expectedDialogWidth) > 1 ||
+      dialogBox.left < 0 ||
+      dialogBox.right > width
+    )
+      throw new Error(
+        `Wide monthly dialog has incorrect bounds at ${width}px: ${JSON.stringify(dialogBox)}`,
+      );
   }
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Signed-out landing, profile login, and removed landing/workspace UI passed on all four routes at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
+    "Signed-out landing, profile login, and wide-dialog bounds passed at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
   );
 } finally {
   await browser.close();

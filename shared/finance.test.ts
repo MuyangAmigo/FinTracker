@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   balanceInput,
+  annualSummary,
   cashFlow,
   completedCashFlow,
   csv,
@@ -8,6 +9,7 @@ import {
   decimal,
   latestBalances,
   money,
+  monthlySummary,
   monthEnd,
   monthInput,
   parseMoney,
@@ -163,6 +165,45 @@ describe("exact finance behavior", () => {
     expect(latestBalances(store, "2024-02-29")[0].amountMinor).toBe("10000");
     expect(latestBalances(store, "2024-04-30", "a")).toHaveLength(0);
     expect(latestBalances(store, "2024-04-30", "b")[0].amountMinor).toBe("9000");
+  });
+  it("keeps annual totals exact and includes partial recorded months only in the selected year", () => {
+    const data: Store = {
+      ...store,
+      periods: [
+        { month: "2024-01", incomeComplete: true, expenseComplete: true, version: 0 },
+        { month: "2024-02", incomeComplete: true, expenseComplete: false, version: 0 },
+      ],
+      entries: [
+        ...store.entries,
+        { ...store.entries[0], id: "partial", month: "2024-02", amountMinor: "10" },
+        { ...store.entries[0], id: "previous", month: "2023-12", amountMinor: "999999" },
+      ],
+    };
+    const annual = annualSummary(data, "2024");
+    expect(annual.income).toBe(200010n);
+    expect(annual.expense).toBe(12345n);
+    expect(annual.savings).toBe(187665n);
+    expect(annual.recordedMonths).toBe(2);
+    expect(annual.completeMonths).toBe(1);
+    expect(annual.rate).toBeNull();
+    data.periods[1].expenseComplete = true;
+    expect(annualSummary(data, "2024").rate).toBe("93.83%");
+  });
+  it("distinguishes unrecorded monthly amounts from explicit zero and independent completeness", () => {
+    const data: Store = {
+      ...store,
+      entries: [{ ...store.entries[0], amountMinor: "0" }],
+      periods: [
+        { month: "2024-01", incomeComplete: true, expenseComplete: false, version: 0 },
+      ],
+    };
+    const january = monthlySummary(data, "2024-01");
+    expect(january.incomeRecorded).toBe(true);
+    expect(january.income).toBe(0n);
+    expect(january.expenseRecorded).toBe(false);
+    expect(january.rate).toBeNull();
+    expect(monthlySummary(data, "2024-02").recorded).toBe(false);
+    expect(annualSummary(data, "2025").incomeRecorded).toBe(false);
   });
   it("rejects duplicate batch rows and negative assets", () => {
     expect(
