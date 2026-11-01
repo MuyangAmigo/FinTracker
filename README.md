@@ -99,6 +99,8 @@ users. Keep the password in private local configuration, not source code.
   View and edit open in dialogs; closing an unsaved edit requires confirmation.
   Household-owner filters and currency captions are omitted, not ownership checks.
   Income and spending completion statuses are shown independently.
+  Previous/next-year controls allow entering the first record in an unrecorded
+  year. Monthly view/edit actions stay disabled until a save and its refresh finish.
 - Asset distribution uses the latest known balances as of the selected year end
   (today for the current year). Asset management retains account balances and
   their valuation history; asset trend charts are not shown.

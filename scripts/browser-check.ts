@@ -87,10 +87,33 @@ try {
           fullPage: true,
         });
     }
+    const dialogBox = await page.evaluate(() => {
+      const dialog = document.createElement("dialog");
+      dialog.className = "modal modal-wide";
+      dialog.textContent = "Synthetic monthly dialog layout check";
+      document.body.append(dialog);
+      try {
+        dialog.showModal();
+        const box = dialog.getBoundingClientRect();
+        return { width: box.width, left: box.left, right: box.right };
+      } finally {
+        dialog.close();
+        dialog.remove();
+      }
+    });
+    const expectedDialogWidth = Math.min(1040, width - 32);
+    if (
+      Math.abs(dialogBox.width - expectedDialogWidth) > 1 ||
+      dialogBox.left < 0 ||
+      dialogBox.right > width
+    )
+      throw new Error(
+        `Wide monthly dialog has incorrect bounds at ${width}px: ${JSON.stringify(dialogBox)}`,
+      );
   }
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Signed-out landing, profile login, and removed landing/workspace UI passed on all four routes at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
+    "Signed-out landing, profile login, and wide-dialog bounds passed at 1440, 1024, 893, 760, 390, and 320px without page errors or horizontal overflow.",
   );
 } finally {
   await browser.close();

@@ -391,6 +391,38 @@ export function FinanceApp({ page }: { page: Page }) {
     .reverse();
   const yearEnd = `${year}-12-31`;
   const asOf = yearEnd < today() ? yearEnd : today();
+  const yearControl = (
+    <div className="year-control">
+      <button
+        type="button"
+        className="text-button"
+        aria-label="上一年"
+        disabled={busy || Number(year) === 0}
+        onClick={() => setYear(String(Number(year) - 1).padStart(4, "0"))}
+      >
+        上一年
+      </button>
+      <label>
+        <span className="sr-only">记录年份</span>
+        <select value={year} disabled={busy} onChange={(e) => setYear(e.target.value)}>
+          {years.map((value) => (
+            <option key={value} value={value}>
+              {value} 年
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="text-button"
+        aria-label="下一年"
+        disabled={busy || Number(year) === 9999}
+        onClick={() => setYear(String(Number(year) + 1).padStart(4, "0"))}
+      >
+        下一年
+      </button>
+    </div>
+  );
   const closeLedger = () => {
     if (!guardNavigation()) return;
     setLedgerMode(null);
@@ -405,7 +437,7 @@ export function FinanceApp({ page }: { page: Page }) {
     setNotice("");
   };
   const open = (value: "account" | "income" | "balance", account?: Account) => {
-    if (guardNavigation()) {
+    if (!busy && guardNavigation()) {
       setEditing(account);
       setLedgerMode(null);
       setDirty(false);
@@ -544,11 +576,9 @@ export function FinanceApp({ page }: { page: Page }) {
                     {page === "assets" ? "资产估值" : "年度视图"}
                   </span>
                   <div className="filters">
-                    <label>
-                      <span className="sr-only">
-                        {page === "assets" ? "记录月份" : "记录年份"}
-                      </span>
-                      {page === "assets" ? (
+                    {page === "assets" ? (
+                      <label>
+                        <span className="sr-only">记录月份</span>
                         <input
                           type="month"
                           value={month}
@@ -559,16 +589,10 @@ export function FinanceApp({ page }: { page: Page }) {
                             }
                           }}
                         />
-                      ) : (
-                        <select value={year} onChange={(e) => setYear(e.target.value)}>
-                          {years.map((value) => (
-                            <option key={value} value={value}>
-                              {value} 年
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </label>
+                      </label>
+                    ) : (
+                      yearControl
+                    )}
                   </div>
                 </div>
               )}
@@ -578,18 +602,7 @@ export function FinanceApp({ page }: { page: Page }) {
                     store={store}
                     year={year}
                     asOf={asOf}
-                    yearControl={
-                      <label className="year-control">
-                        <span className="sr-only">记录年份</span>
-                        <select value={year} onChange={(e) => setYear(e.target.value)}>
-                          {years.map((value) => (
-                            <option key={value} value={value}>
-                              {value} 年
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    }
+                    yearControl={yearControl}
                   />
                 ) : (
                   <section className="panel">
@@ -606,7 +619,12 @@ export function FinanceApp({ page }: { page: Page }) {
                       </div>
                       <AnnualMetrics store={store} year={year} />
                     </section>
-                    <MonthlyTable store={store} year={year} onOpen={selectMonth} />
+                    <MonthlyTable
+                      store={store}
+                      year={year}
+                      onOpen={selectMonth}
+                      busy={busy}
+                    />
                   </>
                 ) : (
                   <section className="panel">
@@ -870,10 +888,12 @@ function MonthlyTable({
   store,
   year,
   onOpen,
+  busy,
 }: {
   store: Store;
   year: string;
   onOpen: (month: string, mode: "view" | "edit") => void;
+  busy: boolean;
 }) {
   const rows = annualSummary(store, year).months.toReversed();
   return (
@@ -926,6 +946,7 @@ function MonthlyTable({
                     <button
                       className="text-button"
                       aria-label={`查看 ${row.month}`}
+                      disabled={busy}
                       onClick={() => onOpen(row.month, "view")}
                     >
                       查看
@@ -933,6 +954,7 @@ function MonthlyTable({
                     <button
                       className="text-button"
                       aria-label={`编辑 ${row.month}`}
+                      disabled={busy}
                       onClick={() => onOpen(row.month, "edit")}
                     >
                       编辑

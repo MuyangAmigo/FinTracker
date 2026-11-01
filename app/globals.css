@@ -263,8 +263,18 @@ input[type="month"] {
   font-size: 12px;
   line-height: 1.8;
 }
+.year-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.year-control button,
 .year-control select {
   min-height: 44px;
+}
+.year-control button {
+  padding: 0 8px;
+  white-space: nowrap;
 }
 .annual-section + .annual-section {
   margin-top: 40px;
@@ -287,8 +297,9 @@ input[type="month"] {
 .monthly-dialog {
   padding: 24px;
 }
-.modal-wide {
+.modal.modal-wide {
   width: min(1040px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
 }
 .modal-header .icon-button {
   min-width: 44px;

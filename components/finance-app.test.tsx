@@ -570,6 +570,90 @@ describe("household interface", () => {
       "123.45",
     );
   });
+  it.each(["dashboard", "ledger"] as const)(
+    "selects unrecorded years with previous/next controls on %s",
+    async (page) => {
+      store.entries = [];
+      store.periods = [];
+      store.balances = [];
+      render(<FinanceApp page={page} />);
+      await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+      const currentYear = String(new Date().getFullYear());
+      const previousYear = String(Number(currentYear) - 1);
+      expect(
+        within(screen.getByLabelText("记录年份")).getAllByRole("option"),
+      ).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "上一年" }));
+      expect((screen.getByLabelText("记录年份") as HTMLSelectElement).value).toBe(
+        previousYear,
+      );
+      if (page === "ledger") {
+        fireEvent.click(screen.getByRole("button", { name: `编辑 ${previousYear}-01` }));
+        expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe("");
+        fireEvent.change(screen.getByLabelText("Salary 金额"), {
+          target: { value: "12.34" },
+        });
+        mocks.request.mockImplementationOnce(
+          async () => new Response(JSON.stringify({ saved: true })),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+        await screen.findByText("已保存");
+        const call = mocks.request.mock.calls.find(
+          (args) => args[1] === `months/${previousYear}-01`,
+        );
+        expect(monthInput.parse(call?.[3]).entries[0].amount).toBe("12.34");
+      }
+      fireEvent.click(screen.getByRole("button", { name: "下一年" }));
+      expect((screen.getByLabelText("记录年份") as HTMLSelectElement).value).toBe(
+        currentYear,
+      );
+    },
+  );
+  it("selects a missing year between recorded years", async () => {
+    store.periods.push({ ...store.periods[0], month: "2022-01" });
+    render(<FinanceApp page="ledger" />);
+    await screen.findByRole("table");
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    fireEvent.click(screen.getByRole("button", { name: "上一年" }));
+    expect((screen.getByLabelText("记录年份") as HTMLSelectElement).value).toBe("2023");
+    fireEvent.click(screen.getByRole("button", { name: "编辑 2023-01" }));
+    expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe("");
+  });
+  it("disables monthly actions until the post-save refresh finishes", async () => {
+    render(<FinanceApp page="ledger" />);
+    await editMonth();
+    fireEvent.change(screen.getByLabelText("Salary 金额"), {
+      target: { value: "234.56" },
+    });
+    let finishLoad: (response: Response) => void = () => {};
+    mocks.request
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ saved: true })))
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishLoad = resolve;
+        }),
+      );
+    fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const edit = screen.getByRole("button", {
+      name: "编辑 2024-01",
+    }) as HTMLButtonElement;
+    const view = screen.getByRole("button", {
+      name: "查看 2024-01",
+    }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(view.disabled).toBe(true);
+    fireEvent.click(edit);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    store.entries[0].amountMinor = "23456";
+    store.periods[0].version++;
+    await act(async () => finishLoad(new Response(JSON.stringify(store))));
+    await waitFor(() => expect(edit.disabled).toBe(false));
+    fireEvent.click(edit);
+    expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
+      "234.56",
+    );
+  });
   it("reloads after a save even if an earlier refresh is still pending", async () => {
     render(<FinanceApp page="ledger" />);
     await editMonth();
