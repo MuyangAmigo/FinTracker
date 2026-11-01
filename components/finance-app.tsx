@@ -383,6 +383,7 @@ export function FinanceApp({ page }: { page: Page }) {
     .sort()
     .reverse();
   const selectMonth = (value: string, edit = false) => {
+    if (value === month && edit === ledgerEditing) return;
     if (!busy && guardNavigation()) {
       setMonth(value);
       setLedgerEditing(edit);
