@@ -205,6 +205,18 @@ export function cashFlow(store: Store, period: string, owner: string = "ALL") {
   }
   return { income, expense, savings: income - expense };
 }
+export function completedCashFlow(store: Store, period: string, owner = "ALL") {
+  const completeMonths = new Set(
+    store.periods
+      .filter((p) => p.incomeComplete && p.expenseComplete)
+      .map((p) => p.month),
+  );
+  return cashFlow(
+    { ...store, entries: store.entries.filter((e) => completeMonths.has(e.month)) },
+    period,
+    owner,
+  );
+}
 export function latestBalances(store: Store, asOf: string, owner: string = "ALL") {
   const latest = new Map<string, Balance>();
   const assets = new Set(store.accounts.filter((a) => a.assetEnabled).map((a) => a.id));

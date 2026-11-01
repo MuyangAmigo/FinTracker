@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { configured, publicConfig } from "../lib/client";
 import { useFinanceSession } from "./finance-session";
@@ -10,6 +11,7 @@ import {
   balanceInput,
   monthInput,
   cashFlow,
+  completedCashFlow,
   latestBalances,
   decimal,
   money,
@@ -91,6 +93,8 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
       </>
     ),
     close: <path d="m6 6 12 12M6 18 18 6" />,
+    collapse: <path d="m14 6-6 6 6 6" />,
+    expand: <path d="m10 6 6 6-6 6" />,
   };
   return (
     <svg
@@ -121,6 +125,19 @@ function Brand() {
         FinTracker<small>一起，积累好生活</small>
       </span>
     </Link>
+  );
+}
+function Avatar() {
+  return (
+    <Image
+      unoptimized
+      className="profile-avatar"
+      src="https://muyangamigo.github.io/junjieweb/images/profile_photo.jpeg"
+      alt=""
+      width={40}
+      height={40}
+      decoding="async"
+    />
   );
 }
 function Landing() {
@@ -268,6 +285,8 @@ export function FinanceApp({ page }: { page: Page }) {
     apiRequest,
     refresh,
     signOut,
+    sidebarCollapsed,
+    setSidebarCollapsed,
   } = useFinanceSession();
   const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(today().slice(0, 7)),
@@ -276,6 +295,7 @@ export function FinanceApp({ page }: { page: Page }) {
     [editing, setEditing] = useState<Account | undefined>();
   const [busy, setBusy] = useState(false),
     [dirty, setDirty] = useState(false);
+  const [ledgerEditing, setLedgerEditing] = useState(false);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -342,23 +362,35 @@ export function FinanceApp({ page }: { page: Page }) {
     }
   }
   const flow = store ? cashFlow(store, month, owner) : null;
-  const annual = store ? cashFlow(store, month.slice(0, 4), owner) : null;
+  const annual = store ? completedCashFlow(store, month.slice(0, 4), owner) : null;
+  const completedMonths =
+    store?.periods.filter(
+      (p) =>
+        p.month.startsWith(month.slice(0, 4)) && p.incomeComplete && p.expenseComplete,
+    ).length ?? 0;
   const latest = store ? latestBalances(store, monthEnd(month), owner) : [];
   const assetTotal = latest.reduce((sum, b) => sum + BigInt(b.amountMinor), 0n);
   const period = store?.periods.find((p) => p.month === month);
   const complete = Boolean(period?.incomeComplete && period.expenseComplete);
-  const recordedKinds = new Set(
-    store?.entries
-      .filter(
-        (entry) =>
-          entry.month === month &&
-          (owner === "ALL" || (entry.ownerId ?? "SHARED") === owner),
-      )
-      .map((entry) => store.lines.find((line) => line.id === entry.lineId)?.kind),
-  );
-  const incomeRecorded = recordedKinds.has("INCOME") || Boolean(period?.incomeComplete);
-  const expenseRecorded =
-    recordedKinds.has("EXPENSE") || Boolean(period?.expenseComplete);
+  const years = [
+    ...new Set([
+      today().slice(0, 4),
+      month.slice(0, 4),
+      ...(store?.periods.map((p) => p.month.slice(0, 4)) ?? []),
+      ...(store?.entries.map((e) => e.month.slice(0, 4)) ?? []),
+    ]),
+  ]
+    .sort()
+    .reverse();
+  const selectMonth = (value: string, edit = false) => {
+    if (value === month && edit === ledgerEditing) return;
+    if (!busy && guardNavigation()) {
+      setMonth(value);
+      setLedgerEditing(edit);
+      setDirty(false);
+      setNotice("");
+    }
+  };
   const open = (value: "account" | "income" | "balance", account?: Account) => {
     if (guardNavigation()) {
       setEditing(account);
@@ -367,24 +399,40 @@ export function FinanceApp({ page }: { page: Page }) {
     }
   };
   return (
-    <div className={`app-shell${signedIn ? "" : " guest-shell"}`}>
+    <div
+      className={`app-shell${signedIn ? (sidebarCollapsed ? " sidebar-collapsed" : "") : " guest-shell"}`}
+    >
       {signedIn && (
         <aside className="sidebar">
-          <Brand />
+          <div className="sidebar-heading">
+            <Brand />
+            <button
+              className="sidebar-toggle"
+              aria-label={sidebarCollapsed ? "展开导航栏" : "收起导航栏"}
+              aria-expanded={!sidebarCollapsed}
+              aria-controls="finance-navigation"
+              title={sidebarCollapsed ? "展开导航栏" : "收起导航栏"}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            >
+              <Icon name={sidebarCollapsed ? "expand" : "collapse"} />
+            </button>
+          </div>
           <div className="space-label">家庭财务空间</div>
-          <nav aria-label="主导航">
+          <nav id="finance-navigation" aria-label="主导航">
             {nav.map((item) => (
               <Link
                 key={item.id}
                 href={item.href}
                 className={`nav-item ${page === item.id ? "active" : ""}`}
                 aria-current={page === item.id ? "page" : undefined}
+                aria-label={item.label}
+                title={item.label}
                 onClick={(e) => {
                   if (!guardNavigation()) e.preventDefault();
                 }}
               >
                 <Icon name={item.icon} />
-                {item.label}
+                <span className="nav-label">{item.label}</span>
                 {page === item.id && <span className="nav-dot" />}
               </Link>
             ))}
@@ -403,15 +451,18 @@ export function FinanceApp({ page }: { page: Page }) {
           )}
           <div className="topbar-actions">
             {signedIn ? (
-              <button
-                className="text-button"
-                onClick={() => {
-                  if (guardNavigation())
-                    void signOut().catch((e: unknown) => setError(message(e)));
-                }}
-              >
-                退出登录
-              </button>
+              <>
+                <Avatar />
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    if (guardNavigation())
+                      void signOut().catch((e: unknown) => setError(message(e)));
+                  }}
+                >
+                  退出登录
+                </button>
+              </>
             ) : (
               <button
                 className="login-button"
@@ -421,7 +472,7 @@ export function FinanceApp({ page }: { page: Page }) {
                 title={busy ? "正在跳转…" : "Microsoft 登录"}
                 onClick={() => void signIn()}
               >
-                <Icon name="profile" size={22} />
+                <Avatar />
               </button>
             )}
           </div>
@@ -434,24 +485,26 @@ export function FinanceApp({ page }: { page: Page }) {
                 <h1>{titles[page][0]}</h1>
                 <p>{titles[page][1]}</p>
               </div>
-              <button
-                className="primary-button"
-                disabled={!store || busy}
-                onClick={() =>
-                  page === "assets"
-                    ? open("balance")
+              {(page === "assets" || page === "accounts") && (
+                <button
+                  className="primary-button"
+                  disabled={!store || busy}
+                  onClick={() =>
+                    page === "assets"
+                      ? open("balance")
+                      : page === "accounts"
+                        ? open("account")
+                        : open("income")
+                  }
+                >
+                  <Icon name="plus" size={18} />
+                  {page === "assets"
+                    ? "登记资产"
                     : page === "accounts"
-                      ? open("account")
-                      : open("income")
-                }
-              >
-                <Icon name="plus" size={18} />
-                {page === "assets"
-                  ? "登记资产"
-                  : page === "accounts"
-                    ? "新增账户"
-                    : "新增收入来源"}
-              </button>
+                      ? "新增账户"
+                      : "新增收入来源"}
+                </button>
+              )}
             </div>
           )}
           {error && (
@@ -486,23 +539,41 @@ export function FinanceApp({ page }: { page: Page }) {
             <>
               <div className="filter-bar">
                 <div className="segmented">
-                  <span className="selected">月度视图</span>
+                  <span className="selected">
+                    {page === "ledger" ? "全年月份" : "月度视图"}
+                  </span>
                   <span className="filter-caption">CNY · 人民币</span>
                 </div>
                 <div className="filters">
-                  <label>
-                    <span className="sr-only">记录月份</span>
-                    <input
-                      type="month"
-                      value={month}
-                      onChange={(e) => {
-                        if (e.target.value && guardNavigation()) {
-                          setMonth(e.target.value);
-                          setDirty(false);
+                  {page === "ledger" ? (
+                    <label>
+                      <span className="sr-only">记录年份</span>
+                      <select
+                        value={month.slice(0, 4)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          selectMonth(`${e.target.value}-${month.slice(5)}`)
                         }
-                      }}
-                    />
-                  </label>
+                      >
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year} 年
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span className="sr-only">记录月份</span>
+                      <input
+                        type="month"
+                        value={month}
+                        onChange={(e) => {
+                          if (e.target.value) selectMonth(e.target.value);
+                        }}
+                      />
+                    </label>
+                  )}
                   <label>
                     <span className="sr-only">归属筛选</span>
                     <select value={owner} onChange={(e) => setOwner(e.target.value)}>
@@ -522,25 +593,21 @@ export function FinanceApp({ page }: { page: Page }) {
                   <div className="metrics">
                     <Metric
                       label="本月收入"
-                      value={flow && incomeRecorded ? money(flow.income) : "—"}
+                      value={flow && complete ? money(flow.income) : "—"}
                       note={period?.incomeComplete ? "本月收入已完成" : "收入尚未完成"}
                       icon="down"
                       tone="green"
                     />
                     <Metric
                       label="本月支出"
-                      value={flow && expenseRecorded ? money(flow.expense) : "—"}
+                      value={flow && complete ? money(flow.expense) : "—"}
                       note={period?.expenseComplete ? "本月支出已完成" : "支出尚未完成"}
                       icon="up"
                       tone="orange"
                     />
                     <Metric
-                      label={complete ? "本月结余" : "已记录差额"}
-                      value={
-                        flow && (incomeRecorded || expenseRecorded)
-                          ? money(flow.savings)
-                          : "—"
-                      }
+                      label="本月结余"
+                      value={flow && complete ? money(flow.savings) : "—"}
                       note={
                         flow
                           ? `储蓄率 ${savingsRate(flow.income, flow.expense, complete) ?? "暂不适用"}`
@@ -563,12 +630,13 @@ export function FinanceApp({ page }: { page: Page }) {
                   </div>
                   {!complete && store && (
                     <p className="data-warning">
-                      本月记录不完整，结余为已记录数据的差额；不能代表完整月度结余。
+                      {month}{" "}
+                      登记未完成，暂不显示本月收支、结余及储蓄率；未完成月份不计入年度汇总和趋势。资产估值独立显示。
                     </p>
                   )}
-                  {annual && (
+                  {annual && completedMonths > 0 && (
                     <div className="annual-summary">
-                      <span>{month.slice(0, 4)} 年已记录汇总</span>
+                      <span>{month.slice(0, 4)} 年已完成月份汇总</span>
                       <span>
                         收入 <strong>{money(annual.income)}</strong>
                       </span>
@@ -578,7 +646,7 @@ export function FinanceApp({ page }: { page: Page }) {
                       <span>
                         结余 <strong>{money(annual.savings)}</strong>
                       </span>
-                      <small>含未完成月份，非全年最终数值</small>
+                      <small>{completedMonths}/12 个月已完成 · 未完成月份不计入</small>
                     </div>
                   )}
                   <div className="dashboard-grid">
@@ -603,7 +671,7 @@ export function FinanceApp({ page }: { page: Page }) {
                         />
                       )}
                       <div className="panel-footer">
-                        只展示已录入数据；未完成月份会标注。
+                        只展示已完成月份；未完成月份不显示金额。
                         <Link href="/ledger/">
                           开始月度记账 <Icon name="arrow" size={16} />
                         </Link>
@@ -627,40 +695,48 @@ export function FinanceApp({ page }: { page: Page }) {
                       </div>
                     </section>
                   </div>
-                  <section className="panel">
-                    <PanelTitle
-                      title="本月账户支出"
-                      subtitle="个人与共同账户，一目了然"
-                      right={
-                        <Link className="subtle-link" href="/ledger/">
-                          查看全部 <Icon name="arrow" size={16} />
-                        </Link>
-                      }
-                    />
-                    {store ? (
-                      <Spending store={store} month={month} owner={owner} />
-                    ) : (
-                      <Empty
-                        title="还没有可显示的记录"
-                        text="登录后，真实的账户月度支出会显示在这里。"
-                      />
-                    )}
-                  </section>
                 </>
               )}
               {page === "ledger" &&
                 (store ? (
-                  <Ledger
-                    key={`${month}:${period?.version ?? 0}`}
-                    store={store}
-                    month={month}
-                    owner={owner}
-                    mutate={mutate}
-                    busy={busy}
-                    onDirty={setDirty}
-                    onAddAccount={() => open("account")}
-                    onAddIncome={() => open("income")}
-                  />
+                  <>
+                    <MonthList
+                      store={store}
+                      year={month.slice(0, 4)}
+                      owner={owner}
+                      busy={busy}
+                      selected={month}
+                      onSelect={selectMonth}
+                    />
+                    <div className="ledger-toolbar">
+                      <h2>
+                        {month} · {ledgerEditing ? "编辑模式" : "查看模式"}
+                      </h2>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={busy}
+                        onClick={() => selectMonth(month, !ledgerEditing)}
+                      >
+                        {ledgerEditing ? "取消编辑" : "编辑本月记录"}
+                      </button>
+                    </div>
+                    <Ledger
+                      key={`${month}:${period?.version ?? 0}:${ledgerEditing}`}
+                      store={store}
+                      month={month}
+                      owner={owner}
+                      editing={ledgerEditing}
+                      mutate={async (path, body, method) => {
+                        await mutate(path, body, method);
+                        setLedgerEditing(false);
+                      }}
+                      busy={busy}
+                      onDirty={setDirty}
+                      onAddAccount={() => open("account")}
+                      onAddIncome={() => open("income")}
+                    />
+                  </>
                 ) : (
                   <section className="panel">
                     <Empty
@@ -701,7 +777,7 @@ export function FinanceApp({ page }: { page: Page }) {
                     />
                   </section>
                 ))}
-              {store && (
+              {store && page !== "dashboard" && (
                 <div className="export-bar">
                   <span>你的记录，始终由你掌握。</span>
                   <button onClick={() => void download("monthly")}>导出月度收支</button>
@@ -796,7 +872,8 @@ function Trend({ store, year, owner }: { store: Store; year: string; owner: stri
   const points = Array.from({ length: 12 }, (_, i) => {
     const month = `${year}-${String(i + 1).padStart(2, "0")}`;
     const period = store.periods.find((p) => p.month === month);
-    return { month, ...cashFlow(store, month, owner), period };
+    const complete = Boolean(period?.incomeComplete && period.expenseComplete);
+    return { month, ...completedCashFlow(store, month, owner), period, complete };
   });
   const max = Math.max(
     1,
@@ -809,10 +886,14 @@ function Trend({ store, year, owner }: { store: Store; year: string; owner: stri
           <div
             key={p.month}
             className="chart-column"
-            title={`${p.month} 收入 ${money(p.income)}，支出 ${money(p.expense)}${!p.period?.incomeComplete || !p.period.expenseComplete ? "（未完成）" : ""}`}
+            title={
+              p.complete
+                ? `${p.month} 收入 ${money(p.income)}，支出 ${money(p.expense)}`
+                : `${p.month} ${p.period ? "登记未完成，金额不显示" : "未登记"}`
+            }
           >
             <div className="chart-bars">
-              {p.period ? (
+              {p.complete ? (
                 <>
                   <span
                     className="income-bar"
@@ -832,40 +913,35 @@ function Trend({ store, year, owner }: { store: Store; year: string; owner: stri
               )}
             </div>
             <span>
-              {i + 1}月
-              {p.period && (!p.period.incomeComplete || !p.period.expenseComplete)
-                ? "*"
-                : ""}
+              {i + 1}月{p.period && !p.complete ? "*" : ""}
             </span>
           </div>
         ))}
       </div>
       <details className="chart-data">
         <summary>查看准确数值</summary>
-        <table>
-          <thead>
-            <tr>
-              <th>月份</th>
-              <th>收入</th>
-              <th>支出</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {points.map((p) => (
-              <tr key={p.month}>
-                <td>{p.month}</td>
-                <td>{p.period ? money(p.income) : "未记录"}</td>
-                <td>{p.period ? money(p.expense) : "未记录"}</td>
-                <td>
-                  {p.period?.incomeComplete && p.period.expenseComplete
-                    ? "完整"
-                    : "未完成"}
-                </td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>月份</th>
+                <th>收入</th>
+                <th>支出</th>
+                <th>状态</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {points.map((p) => (
+                <tr key={p.month}>
+                  <td>{p.month}</td>
+                  <td>{p.complete ? money(p.income) : "—"}</td>
+                  <td>{p.complete ? money(p.expense) : "—"}</td>
+                  <td>{p.complete ? "已完成" : p.period ? "未完成" : "未登记"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </details>
     </>
   );
@@ -926,62 +1002,124 @@ function Composition({
     </div>
   );
 }
-function Spending({
+function MonthList({
   store,
-  month,
+  year,
   owner,
+  selected,
+  busy,
+  onSelect,
 }: {
   store: Store;
-  month: string;
+  year: string;
   owner: string;
+  selected: string;
+  busy: boolean;
+  onSelect: (month: string, edit: boolean) => void;
 }) {
-  const lines = new Map(store.lines.map((l) => [l.id, l]));
-  const rows = store.entries.filter(
-    (e) =>
-      e.month === month &&
-      lines.get(e.lineId)?.kind === "EXPENSE" &&
-      (owner === "ALL" || (e.ownerId ?? "SHARED") === owner),
-  );
-  if (!rows.length)
-    return (
-      <Empty title="这个月还没有支出记录" text="录入账户月度支出，查看个人与共同开销。" />
+  const lineKinds = new Map(store.lines.map((line) => [line.id, line.kind]));
+  const rows = Array.from({ length: 12 }, (_, i) => {
+    const month = `${year}-${String(i + 1).padStart(2, "0")}`;
+    const period = store.periods.find((p) => p.month === month);
+    const kinds = new Set(
+      store.entries
+        .filter(
+          (e) =>
+            e.month === month && (owner === "ALL" || (e.ownerId ?? "SHARED") === owner),
+        )
+        .map((e) => lineKinds.get(e.lineId)),
     );
+    return {
+      month,
+      period,
+      flow: cashFlow(store, month, owner),
+      incomeRecorded: kinds.has("INCOME") || period?.incomeComplete,
+      expenseRecorded: kinds.has("EXPENSE") || period?.expenseComplete,
+      complete: Boolean(period?.incomeComplete && period.expenseComplete),
+    };
+  });
   return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>账户</th>
-            <th>归属</th>
-            <th className="numeric">月度支出</th>
-            <th>备注</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((e) => (
-            <tr key={e.id}>
-              <td>
-                <span className="row-icon">
-                  <Icon name="wallet" size={17} />
-                </span>
-                {lines.get(e.lineId)!.name}
-              </td>
-              <td>
-                <span className="owner-tag">{ownerName(store, e.ownerId)}</span>
-              </td>
-              <td className="numeric">{money(e.amountMinor)}</td>
-              <td className="muted">{e.note || "—"}</td>
+    <section className="panel month-list">
+      <PanelTitle
+        title={`${year} 年月度信息`}
+        subtitle="金额为已记录值，未完成月份不计算结余；完成状态按全家庭标记。"
+      />
+      <div className="table-scroll">
+        <table aria-label={`${year} 年月度信息`}>
+          <thead>
+            <tr>
+              <th>月份</th>
+              <th>登记状态</th>
+              <th>收入状态</th>
+              <th className="numeric">收入</th>
+              <th>支出状态</th>
+              <th className="numeric">支出</th>
+              <th className="numeric">结余</th>
+              <th>操作</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.month}
+                className={row.month === selected ? "selected-month" : undefined}
+              >
+                <th scope="row">{row.month}</th>
+                <td>
+                  <span
+                    className={`month-status ${row.complete ? "complete" : "incomplete"}`}
+                  >
+                    {row.complete
+                      ? "已完成"
+                      : row.period || row.incomeRecorded || row.expenseRecorded
+                        ? "未完成"
+                        : "未登记"}
+                  </span>
+                </td>
+                <td>{row.period?.incomeComplete ? "已完成" : "未完成"}</td>
+                <td className="numeric">
+                  {row.incomeRecorded ? money(row.flow.income) : "未记录"}
+                </td>
+                <td>{row.period?.expenseComplete ? "已完成" : "未完成"}</td>
+                <td className="numeric">
+                  {row.expenseRecorded ? money(row.flow.expense) : "未记录"}
+                </td>
+                <td className="numeric">
+                  {row.complete ? money(row.flow.savings) : "—"}
+                </td>
+                <td>
+                  <div className="month-actions">
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      aria-label={`查看 ${row.month}`}
+                      onClick={() => onSelect(row.month, false)}
+                    >
+                      查看
+                    </button>
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      aria-label={`编辑 ${row.month}`}
+                      onClick={() => onSelect(row.month, true)}
+                    >
+                      编辑
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 function Ledger({
   store,
   month,
   owner,
+  editing,
   mutate,
   busy,
   onDirty,
@@ -991,6 +1129,7 @@ function Ledger({
   store: Store;
   month: string;
   owner: string;
+  editing: boolean;
   mutate: Mutation;
   busy: boolean;
   onDirty: (value: boolean) => void;
@@ -1043,127 +1182,164 @@ function Ledger({
     }
   }
   return (
-    <form onSubmit={(e) => void save(e)}>
-      {error && (
-        <div role="alert" className="alert error">
-          {error}
-        </div>
-      )}
-      {(["INCOME", "EXPENSE"] as const).map((kind) => (
-        <section className="panel ledger-panel" key={kind}>
-          <PanelTitle
-            title={kind === "INCOME" ? "月度收入" : "账户支出"}
-            subtitle={
-              kind === "INCOME"
-                ? "工资、股权、其他收入"
-                : "记录消费支出，不重复记录信用卡还款或账户转账"
-            }
-            right={
-              <button
-                type="button"
-                className="subtle-link"
-                onClick={kind === "INCOME" ? onAddIncome : onAddAccount}
-              >
-                <Icon name="plus" size={16} />
-                新增{kind === "INCOME" ? "来源" : "账户"}
-              </button>
-            }
-          />
-          <div className="table-scroll">
-            <table className="entry-table">
-              <thead>
-                <tr>
-                  <th>{kind === "INCOME" ? "收入来源" : "账户"}</th>
-                  <th>归属</th>
-                  <th>金额 (CNY)</th>
-                  <th>备注</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines
-                  .filter(
-                    (l) =>
-                      l.kind === kind &&
-                      (owner === "ALL" || (recordedOwner(l) ?? "SHARED") === owner),
-                  )
-                  .map((line) => (
-                    <tr key={line.id}>
-                      <td>
-                        {line.name}
-                        {line.archived && <small> · 已归档</small>}
-                      </td>
-                      <td>
-                        <span className="owner-tag">
-                          {ownerName(store, recordedOwner(line))}
-                        </span>
-                      </td>
-                      <td>
-                        <input
-                          aria-label={`${line.name} 金额`}
-                          inputMode="decimal"
-                          placeholder="尚未记录"
-                          value={values[line.id]?.amount ?? ""}
-                          onChange={(e) => {
-                            setValues((v) => ({
-                              ...v,
-                              [line.id]: { ...v[line.id], amount: e.target.value },
-                            }));
-                            onDirty(true);
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label={`${line.name} 备注`}
-                          maxLength={500}
-                          placeholder="选填"
-                          value={values[line.id]?.note ?? ""}
-                          onChange={(e) => {
-                            setValues((v) => ({
-                              ...v,
-                              [line.id]: { ...v[line.id], note: e.target.value },
-                            }));
-                            onDirty(true);
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (editing && !busy) void save(e);
+      }}
+    >
+      <fieldset className="ledger-fields" disabled={busy}>
+        {error && (
+          <div role="alert" className="alert error">
+            {error}
           </div>
-          {!lines.some((l) => l.kind === kind) && (
-            <Empty
-              title="先添加一行"
-              text="新账户或收入来源会自动出现在每个月的记账表中。"
+        )}
+        {(["INCOME", "EXPENSE"] as const).map((kind) => (
+          <section className="panel ledger-panel" key={kind}>
+            <PanelTitle
+              title={kind === "INCOME" ? "月度收入" : "账户支出"}
+              subtitle={
+                kind === "INCOME"
+                  ? "工资、股权、其他收入"
+                  : "记录消费支出，不重复记录信用卡还款或账户转账"
+              }
+              right={
+                editing ? (
+                  <button
+                    type="button"
+                    className="subtle-link"
+                    onClick={kind === "INCOME" ? onAddIncome : onAddAccount}
+                  >
+                    <Icon name="plus" size={16} />
+                    新增{kind === "INCOME" ? "来源" : "账户"}
+                  </button>
+                ) : undefined
+              }
             />
-          )}
-          <div className="panel-footer">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                disabled={owner !== "ALL"}
-                checked={kind === "INCOME" ? incomeComplete : expenseComplete}
-                onChange={(e) => {
-                  if (kind === "INCOME") setIncomeComplete(e.target.checked);
-                  else setExpenseComplete(e.target.checked);
-                  onDirty(true);
-                }}
+            <div className="table-scroll">
+              <table className="entry-table">
+                <thead>
+                  <tr>
+                    <th>{kind === "INCOME" ? "收入来源" : "账户"}</th>
+                    <th>归属</th>
+                    <th>金额 (CNY)</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines
+                    .filter(
+                      (l) =>
+                        l.kind === kind &&
+                        (owner === "ALL" || (recordedOwner(l) ?? "SHARED") === owner),
+                    )
+                    .map((line) => (
+                      <tr key={line.id}>
+                        <td>
+                          {line.name}
+                          {line.archived && <small> · 已归档</small>}
+                        </td>
+                        <td>
+                          <span className="owner-tag">
+                            {ownerName(store, recordedOwner(line))}
+                          </span>
+                        </td>
+                        <td>
+                          {editing ? (
+                            <input
+                              aria-label={`${line.name} 金额`}
+                              inputMode="decimal"
+                              placeholder="尚未记录"
+                              value={values[line.id]?.amount ?? ""}
+                              onChange={(e) => {
+                                setValues((v) => ({
+                                  ...v,
+                                  [line.id]: { ...v[line.id], amount: e.target.value },
+                                }));
+                                onDirty(true);
+                              }}
+                            />
+                          ) : (
+                            <span>
+                              {values[line.id]?.amount
+                                ? money(
+                                    entries.find((e) => e.lineId === line.id)!
+                                      .amountMinor,
+                                  )
+                                : "未记录"}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {editing ? (
+                            <input
+                              aria-label={`${line.name} 备注`}
+                              maxLength={500}
+                              placeholder="选填"
+                              value={values[line.id]?.note ?? ""}
+                              onChange={(e) => {
+                                setValues((v) => ({
+                                  ...v,
+                                  [line.id]: { ...v[line.id], note: e.target.value },
+                                }));
+                                onDirty(true);
+                              }}
+                            />
+                          ) : (
+                            <span className="entry-note">
+                              {values[line.id]?.note || "—"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {!lines.some((l) => l.kind === kind) && (
+              <Empty
+                title="先添加一行"
+                text="新账户或收入来源会自动出现在每个月的记账表中。"
               />
-              {kind === "INCOME"
-                ? "全家庭本月收入已记录完整"
-                : "全家庭本月支出已记录完整"}
-            </label>
-            <span>空白 ≠ 零</span>
+            )}
+            <div className="panel-footer">
+              {editing ? (
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    disabled={owner !== "ALL"}
+                    checked={kind === "INCOME" ? incomeComplete : expenseComplete}
+                    onChange={(e) => {
+                      if (kind === "INCOME") setIncomeComplete(e.target.checked);
+                      else setExpenseComplete(e.target.checked);
+                      onDirty(true);
+                    }}
+                  />
+                  {kind === "INCOME"
+                    ? "全家庭本月收入已记录完整"
+                    : "全家庭本月支出已记录完整"}
+                </label>
+              ) : (
+                <span>
+                  {kind === "INCOME" ? "收入" : "支出"}登记：
+                  {(kind === "INCOME" ? incomeComplete : expenseComplete)
+                    ? "已完成"
+                    : "未完成"}
+                </span>
+              )}
+              <span>空白 ≠ 零</span>
+            </div>
+          </section>
+        ))}
+        {editing && (
+          <div className="save-bar">
+            <span>保存不会修改任何资产余额。</span>
+            <button type="submit" className="primary-button" disabled={busy}>
+              {busy ? "保存中…" : "保存本月记录"}
+            </button>
           </div>
-        </section>
-      ))}
-      <div className="save-bar">
-        <span>保存不会修改任何资产余额。</span>
-        <button type="submit" className="primary-button" disabled={busy}>
-          {busy ? "保存中…" : "保存本月记录"}
-        </button>
-      </div>
+        )}
+      </fieldset>
     </form>
   );
 }

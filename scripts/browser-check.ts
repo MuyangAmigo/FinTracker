@@ -30,6 +30,15 @@ try {
           );
         });
       await page.locator(".landing-hero").waitFor();
+      if (path === "/" && width === 1440) {
+        const icon = page.locator('link[rel="icon"]');
+        const href = await icon.getAttribute("href");
+        const expected = `${new URL(root).pathname.replace(/\/$/, "")}/favicon.png`;
+        if (!href || new URL(href, root).pathname !== expected)
+          throw new Error("Favicon does not respect the configured base path");
+        if ((await page.request.get(new URL(href, root).href)).status() !== 200)
+          throw new Error("Favicon image is unavailable");
+      }
       const login = page.getByRole("banner").getByRole("button", {
         name: "Microsoft 登录",
       });
@@ -53,8 +62,8 @@ try {
         throw new Error(`Profile login must have a 44px touch target at ${width}px`);
       if ((await login.textContent()) !== "")
         throw new Error(`Profile login must be icon-only: ${path}`);
-      if (!(await login.locator("svg circle").isVisible()))
-        throw new Error(`Profile icon is not visible at ${width}px: ${path}`);
+      if (!(await login.locator(".profile-avatar").isVisible()))
+        throw new Error(`Travel Log avatar is not visible at ${width}px: ${path}`);
       if (
         (await page.locator(".landing-access, .landing-explore").count()) ||
         (await page
