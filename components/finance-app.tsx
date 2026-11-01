@@ -246,8 +246,8 @@ function Landing() {
         ].map((feature) => (
           <article className="landing-feature" key={feature.number}>
             <div className="landing-feature-top">
-              <Icon name={feature.icon} size={22} />
               <span>{feature.number}</span>
+              <Icon name={feature.icon} size={22} />
             </div>
             <h2>{feature.title}</h2>
             <p>{feature.text}</p>

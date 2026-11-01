@@ -23,6 +23,9 @@ shows a setup notice and does not pretend to contain or save records.
 Signed-out visitors see a dedicated landing page on every finance route, with
 an accessible personal-avatar button for Microsoft sign-in in place of the
 FinTracker brand icon.
+The three landing-page features sit at the bottom of the page, with their
+numbers left-aligned before the icons. On smaller screens, they follow the
+hero in normal flow without covering content.
 No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
 the requested workspace. The sidebar uses the same brand avatar for sign-out,
