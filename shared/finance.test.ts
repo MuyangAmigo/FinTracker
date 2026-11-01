@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   balanceInput,
   cashFlow,
+  completedCashFlow,
   csv,
   dateSchema,
   decimal,
@@ -120,6 +121,36 @@ describe("exact finance behavior", () => {
     });
     expect(cashFlow(store, "2024-01", "a").expense).toBe(0n);
     expect(cashFlow(store, "2024", "SHARED").expense).toBe(12345n);
+  });
+  it("excludes incomplete and unregistered months from overview totals", () => {
+    const data: Store = {
+      ...store,
+      periods: [
+        { month: "2024-01", incomeComplete: true, expenseComplete: true, version: 0 },
+        { month: "2024-02", incomeComplete: true, expenseComplete: false, version: 0 },
+      ],
+      entries: [
+        ...store.entries,
+        {
+          ...store.entries[0],
+          id: "partial",
+          month: "2024-02",
+          amountMinor: "900719925474099312",
+        },
+        {
+          ...store.entries[0],
+          id: "unregistered",
+          month: "2024-03",
+          amountMinor: "10000",
+        },
+      ],
+    };
+    expect(completedCashFlow(data, "2024")).toEqual(cashFlow(store, "2024"));
+    expect(completedCashFlow(data, "2024", "SHARED").expense).toBe(12345n);
+    expect(completedCashFlow(data, "2024", "a").expense).toBe(0n);
+    expect(completedCashFlow(data, "2024-02").income).toBe(0n);
+    expect(cashFlow(data, "2024-02").income).toBe(900719925474099312n);
+    expect(data.entries).toHaveLength(4);
   });
   it("does not calculate savings rates for missing or zero income", () => {
     expect(savingsRate(0n, 1n, true)).toBeNull();

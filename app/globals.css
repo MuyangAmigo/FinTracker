@@ -166,11 +166,12 @@ input[type="month"] {
   clip-path: inset(50%);
 }
 .app-shell {
+  --sidebar-width: 238px;
   display: flex;
   min-height: 100vh;
 }
 .sidebar {
-  width: 238px;
+  width: var(--sidebar-width);
   position: fixed;
   inset: 0 auto 0 0;
   border-right: 1px solid var(--border);
@@ -217,6 +218,7 @@ input[type="month"] {
   gap: 9px;
 }
 .nav-item {
+  min-height: 44px;
   padding: 13px 16px;
   display: flex;
   align-items: center;
@@ -241,8 +243,50 @@ input[type="month"] {
   margin-left: auto;
 }
 .workspace {
-  margin-left: 238px;
-  width: calc(100% - 238px);
+  margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+}
+.sidebar-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sidebar-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
+  background: #ecf5ef;
+  color: var(--green);
+}
+.sidebar-toggle:hover {
+  background: #dceee3;
+}
+.app-shell.sidebar-collapsed {
+  --sidebar-width: 82px;
+}
+.sidebar-collapsed .sidebar {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.sidebar-collapsed .sidebar-heading {
+  flex-direction: column;
+}
+.sidebar-collapsed .brand > span:not(.brand-mark),
+.sidebar-collapsed .space-label,
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .nav-dot {
+  display: none;
+}
+.sidebar-collapsed nav {
+  margin-top: 30px;
+}
+.sidebar-collapsed .nav-item {
+  justify-content: center;
+  padding: 13px;
 }
 .topbar {
   height: 73px;
@@ -657,6 +701,55 @@ main {
 .ledger-panel {
   margin-bottom: 22px;
 }
+.month-list {
+  margin-bottom: 24px;
+}
+.selected-month > td,
+.selected-month > th {
+  background: #ecf5ef;
+}
+.month-status {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 5px 9px;
+}
+.month-status.complete {
+  background: #ecf5ef;
+  color: #26745b;
+}
+.month-status.incomplete {
+  background: #fbf3df;
+  color: #775b23;
+}
+.month-actions,
+.ledger-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.month-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+}
+.ledger-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.ledger-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.entry-note {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 100px;
+  max-width: 350px;
+}
 .entry-table input {
   width: 100%;
   max-width: 230px;
@@ -902,6 +995,12 @@ main {
 .topbar-actions {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+.profile-avatar {
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
 }
 .login-button {
   display: grid;
@@ -1258,14 +1357,12 @@ main {
   }
 }
 @media (max-width: 1150px) {
+  .app-shell {
+    --sidebar-width: 205px;
+  }
   .sidebar {
-    width: 205px;
     padding-left: 16px;
     padding-right: 16px;
-  }
-  .workspace {
-    margin-left: 205px;
-    width: calc(100% - 205px);
   }
   main {
     padding: 30px 25px;
@@ -1323,6 +1420,12 @@ main {
     margin-top: 16px;
     gap: 5px;
     justify-content: space-between;
+  }
+  .sidebar-collapsed .sidebar-heading {
+    flex-direction: row;
+  }
+  .sidebar-collapsed nav {
+    display: none;
   }
   .nav-item {
     padding: 9px 10px;

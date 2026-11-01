@@ -23,6 +23,7 @@ function useSession() {
   const [loading, setLoading] = useState(configured);
   const [store, setStore] = useState<Store | null>(null);
   const [error, setError] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const invalidate = useCallback(() => {
     generation.current++;
@@ -129,6 +130,8 @@ function useSession() {
     refresh,
     refreshIfStale,
     signOut,
+    sidebarCollapsed,
+    setSidebarCollapsed,
   };
 }
 

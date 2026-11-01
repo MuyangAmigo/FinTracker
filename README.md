@@ -24,7 +24,11 @@ Signed-out visitors see a dedicated landing page on every finance route, with
 an accessible profile-icon button for Microsoft sign-in in the top-right header.
 No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
-the requested workspace; the shared sidebar contains navigation only.
+the requested workspace. The shared sidebar can collapse to an icon rail on
+desktop and hide navigation on narrow screens; its state is kept in memory
+across routes. The header uses the same public portrait as Travel Log, and the
+favicon uses its illustrated icon with a green outer ring. The portrait is
+decorative, not proof of identity; Microsoft authentication is unchanged.
 
 Finance routes share one authenticated, in-memory session. Navigation reuses the
 loaded records instead of repeating Microsoft initialization and downloading the
@@ -89,6 +93,17 @@ users. Keep the password in private local configuration, not source code.
   Blank is unrecorded; `0.00` is explicitly recorded zero.
 - Mark income and expenses complete independently. Partial months are labelled;
   savings rates require complete records and positive income.
+- The overview contains summary information only. Monthly income, expenses,
+  savings, and savings rate are hidden until both completion flags are set;
+  annual totals and trends exclude incomplete months. Independent asset
+  valuations remain visible.
+- The monthly page lists all 12 months of the selected year, including
+  unrecorded months, with separate income and expense completion statuses.
+  Available years come from authenticated records plus the current year.
+  Recorded partial amounts remain visible here; blanks remain unrecorded.
+  Viewing is read-only. Choose a month's **Edit** action or **Edit this month**
+  to enter editing; cancel discards changes only after confirmation when dirty.
+  A successful save returns to viewing and reloads persisted records.
 - Shared spending counts once. It is not split automatically between people.
 - Monthly income and expenses never change asset balances.
 - Valuations can update selected accounts only. Omitted accounts are not reset.
