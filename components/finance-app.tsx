@@ -300,11 +300,12 @@ export function FinanceApp({ page }: { page: Page }) {
     apiRequest,
     refresh,
     signOut,
+    sidebarCollapsed: collapsed,
+    setSidebarCollapsed: setCollapsed,
   } = useFinanceSession();
   const [notice, setNotice] = useState("");
   const [month, setMonth] = useState(today().slice(0, 7));
   const [year, setYear] = useState(today().slice(0, 4));
-  const [collapsed, setCollapsed] = useState(false);
   const [ledgerMode, setLedgerMode] = useState<"view" | "edit" | null>(null);
   const [modal, setModal] = useState<"account" | "income" | "balance" | null>(null),
     [editing, setEditing] = useState<Account | undefined>();
@@ -394,6 +395,14 @@ export function FinanceApp({ page }: { page: Page }) {
     if (!guardNavigation()) return;
     setLedgerMode(null);
     setDirty(false);
+  };
+  const selectMonth = (value: string, mode: "view" | "edit") => {
+    if (value === month && mode === ledgerMode) return;
+    if (busy || !guardNavigation()) return;
+    setMonth(value);
+    setLedgerMode(mode);
+    setDirty(false);
+    setNotice("");
   };
   const open = (value: "account" | "income" | "balance", account?: Account) => {
     if (guardNavigation()) {
@@ -597,16 +606,7 @@ export function FinanceApp({ page }: { page: Page }) {
                       </div>
                       <AnnualMetrics store={store} year={year} />
                     </section>
-                    <MonthlyTable
-                      store={store}
-                      year={year}
-                      onOpen={(value, mode) => {
-                        setMonth(value);
-                        setLedgerMode(mode);
-                        setDirty(false);
-                        setNotice("");
-                      }}
-                    />
+                    <MonthlyTable store={store} year={year} onOpen={selectMonth} />
                   </>
                 ) : (
                   <section className="panel">
@@ -891,7 +891,8 @@ function MonthlyTable({
               <th className="numeric">支出</th>
               <th className="numeric">结余</th>
               <th className="numeric">储蓄率</th>
-              <th>状态</th>
+              <th>收入状态</th>
+              <th>支出状态</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -910,7 +911,16 @@ function MonthlyTable({
                   {row.recorded && !row.complete ? " *" : ""}
                 </td>
                 <td className="numeric">{row.rate ?? "—"}</td>
-                <td>{!row.recorded ? "未记录" : row.complete ? "完整" : "未完成"}</td>
+                {(["incomeComplete", "expenseComplete"] as const).map((kind) => {
+                  const period = store.periods.find(
+                    (period) => period.month === row.month,
+                  );
+                  return (
+                    <td key={kind}>
+                      {period?.[kind] ? "完整" : row.recorded ? "未完成" : "未记录"}
+                    </td>
+                  );
+                })}
                 <td>
                   <div className="row-actions">
                     <button
@@ -1217,7 +1227,9 @@ function Ledger({
                       </td>
                       <td>
                         {readOnly ? (
-                          values[line.id]?.note || "—"
+                          <span className="entry-note">
+                            {values[line.id]?.note || "—"}
+                          </span>
                         ) : (
                           <input
                             aria-label={`${line.name} 备注`}

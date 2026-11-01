@@ -27,6 +27,8 @@ No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
 the requested workspace. The sidebar uses the same brand avatar for sign-out,
 with the navigation collapse control at the bottom; there is no workspace top banner.
+The collapsed state is kept in memory across finance routes. The avatar is
+decorative, not proof of identity; Microsoft authentication is unchanged.
 
 Finance routes share one authenticated, in-memory session. Navigation reuses the
 loaded records instead of repeating Microsoft initialization and downloading the
@@ -96,6 +98,7 @@ users. Keep the password in private local configuration, not source code.
   while keeping the avatar and navigation controls within the sidebar.
   View and edit open in dialogs; closing an unsaved edit requires confirmation.
   Household-owner filters and currency captions are omitted, not ownership checks.
+  Income and spending completion statuses are shown independently.
 - Asset distribution uses the latest known balances as of the selected year end
   (today for the current year). Asset management retains account balances and
   their valuation history; asset trend charts are not shown.

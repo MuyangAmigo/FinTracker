@@ -193,6 +193,7 @@ input[type="month"] {
   gap: 9px;
 }
 .nav-item {
+  min-height: 44px;
   padding: 13px 16px;
   display: flex;
   align-items: center;
@@ -687,6 +688,13 @@ main {
   max-width: 230px;
   min-width: 110px;
   font-size: 12px;
+}
+.entry-note {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 100px;
+  max-width: 350px;
 }
 .entry-table th:first-child,
 .entry-table td:first-child {

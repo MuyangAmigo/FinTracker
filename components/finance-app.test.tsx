@@ -14,7 +14,7 @@ import { FinanceApp } from "./finance-app";
 import { FinanceProvider } from "./finance-session";
 import { ApiError, publicConfig } from "../lib/client";
 import type { Store } from "../shared/finance";
-import { monthInput, balanceInput } from "../shared/finance";
+import { monthInput, balanceInput, parseMoney } from "../shared/finance";
 
 const mocks = vi.hoisted(() => ({
   configured: true,
@@ -128,9 +128,8 @@ beforeEach(() => {
       if (method === "PUT" && path.startsWith("months/")) {
         const parsed = monthInput.parse(body);
         store.periods[0].version++;
-        store.entries[0].amountMinor = String(
-          Math.round(Number(parsed.entries[0].amount) * 100),
-        );
+        if (parsed.entries[0].amount !== null)
+          store.entries[0].amountMinor = parseMoney(parsed.entries[0].amount).toString();
       }
       return new Response(JSON.stringify({ saved: true }));
     },
@@ -148,6 +147,29 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("household interface", () => {
+  it("keeps collapsed navigation across finance routes", async () => {
+    const view = render(<FinanceApp key="dashboard" page="dashboard" />);
+    fireEvent.click(await screen.findByRole("button", { name: "收起导航栏" }));
+    view.rerender(<FinanceApp key="ledger" page="ledger" />);
+    expect(
+      screen.getByRole("button", { name: "展开导航栏" }).getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(screen.queryByRole("link", { name: "FinTracker 首页" })).toBeNull();
+    expect(screen.getByRole("link", { name: "月度记账" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "展开导航栏" }));
+    expect(screen.getByRole("link", { name: "FinTracker 首页" })).toBeTruthy();
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+  });
+  it("shows independent income and spending completeness in the monthly table", async () => {
+    store.periods[0].expenseComplete = false;
+    render(<FinanceApp page="ledger" />);
+    await screen.findByRole("table");
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    const row = screen.getByRole("button", { name: "查看 2024-01" }).closest("tr")!;
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[5].textContent).toBe("完整");
+    expect(cells[6].textContent).toBe("未完成");
+  });
   it("reuses the authenticated store when navigating between finance pages", async () => {
     const view = render(<FinanceApp key="dashboard" page="dashboard" />);
     await waitFor(() => expect(mocks.request).toHaveBeenCalledTimes(1));
