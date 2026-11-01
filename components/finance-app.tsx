@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { configured, publicConfig } from "../lib/client";
 import { useFinanceSession } from "./finance-session";
@@ -10,7 +11,6 @@ import {
   balanceInput,
   monthInput,
   annualSummary,
-  assetTrend,
   latestBalances,
   decimal,
   money,
@@ -79,18 +79,38 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
         <path d="M8 10V7a4 4 0 0 1 8 0v3" />
       </>
     ),
-    profile: (
-      <>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
-      </>
-    ),
     home: (
       <>
         <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
       </>
     ),
     close: <path d="m6 6 12 12M6 18 18 6" />,
+    banknote: (
+      <>
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M6 12h.01M18 12h.01" />
+      </>
+    ),
+    receipt: (
+      <>
+        <path d="M5 3h14v18l-3-2-4 2-4-2-3 2V3Z" />
+        <path d="M9 7h6M9 11h6M9 15h3" />
+      </>
+    ),
+    savings: (
+      <>
+        <path d="M5 10a7 7 0 0 1 10-4l3-2v5l3 2v5h-3l-1 4h-3v-3H9v3H6l-1-5-3-2v-3h3Z" />
+        <path d="M9 7h4M16 11h.01" />
+      </>
+    ),
+    percent: (
+      <>
+        <path d="m5 19 14-14" />
+        <circle cx="7" cy="7" r="3" />
+        <circle cx="17" cy="17" r="3" />
+      </>
+    ),
   };
   return (
     <svg
@@ -111,16 +131,28 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 function ownerName(store: Store, id: string | null) {
   return store.people.find((p) => p.id === id)?.name ?? "共同";
 }
-function Brand() {
+function Brand({ access, compact = false }: { access: ReactNode; compact?: boolean }) {
   return (
-    <Link href="/" className="brand" aria-label="FinTracker 首页">
-      <span className="brand-mark">
-        <Icon name="wallet" size={23} />
-      </span>
-      <span>
-        FinTracker<small>一起，积累好生活</small>
-      </span>
-    </Link>
+    <div className="brand">
+      {access}
+      {!compact && (
+        <Link href="/" className="brand-name" aria-label="FinTracker 首页">
+          FinTracker<small>一起，积累好生活</small>
+        </Link>
+      )}
+    </div>
+  );
+}
+function Avatar() {
+  return (
+    <Image
+      unoptimized
+      src={`${publicConfig.basePath}/favicon.png`}
+      alt=""
+      width={40}
+      height={40}
+      className="profile-avatar"
+    />
   );
 }
 function Landing() {
@@ -379,18 +411,22 @@ export function FinanceApp({ page }: { page: Page }) {
       {signedIn && (
         <aside className="sidebar">
           <div className="brand-access">
-            <Brand />
-            <button
-              className="login-button"
-              aria-label="退出登录"
-              title="退出登录"
-              onClick={() => {
-                if (guardNavigation())
-                  void signOut().catch((e: unknown) => setError(message(e)));
-              }}
-            >
-              <Icon name="profile" size={22} />
-            </button>
+            <Brand
+              compact={collapsed}
+              access={
+                <button
+                  className="login-button"
+                  aria-label="退出登录"
+                  title="退出登录"
+                  onClick={() => {
+                    if (guardNavigation())
+                      void signOut().catch((e: unknown) => setError(message(e)));
+                  }}
+                >
+                  <Avatar />
+                </button>
+              }
+            />
           </div>
           <div className="space-label">家庭财务空间</div>
           <nav aria-label="主导航">
@@ -427,17 +463,20 @@ export function FinanceApp({ page }: { page: Page }) {
         {!signedIn && (
           <header className="topbar">
             <div className="brand-access">
-              <Brand />
-              <button
-                className="login-button"
-                disabled={!configured || loading || busy}
-                aria-busy={loading || busy}
-                aria-label={busy ? "正在跳转…" : "Microsoft 登录"}
-                title={busy ? "正在跳转…" : "Microsoft 登录"}
-                onClick={() => void signIn()}
-              >
-                <Icon name="profile" size={22} />
-              </button>
+              <Brand
+                access={
+                  <button
+                    className="login-button"
+                    disabled={!configured || loading || busy}
+                    aria-busy={loading || busy}
+                    aria-label={busy ? "正在跳转…" : "Microsoft 登录"}
+                    title={busy ? "正在跳转…" : "Microsoft 登录"}
+                    onClick={() => void signIn()}
+                  >
+                    <Avatar />
+                  </button>
+                }
+              />
             </div>
           </header>
         )}
@@ -490,7 +529,7 @@ export function FinanceApp({ page }: { page: Page }) {
             <Landing />
           ) : (
             <>
-              {page !== "accounts" && (
+              {page !== "accounts" && page !== "dashboard" && (
                 <div className="filter-bar">
                   <span className="selected">
                     {page === "assets" ? "资产估值" : "年度视图"}
@@ -526,7 +565,23 @@ export function FinanceApp({ page }: { page: Page }) {
               )}
               {page === "dashboard" &&
                 (store ? (
-                  <Dashboard store={store} year={year} asOf={asOf} />
+                  <Dashboard
+                    store={store}
+                    year={year}
+                    asOf={asOf}
+                    yearControl={
+                      <label className="year-control">
+                        <span className="sr-only">记录年份</span>
+                        <select value={year} onChange={(e) => setYear(e.target.value)}>
+                          {years.map((value) => (
+                            <option key={value} value={value}>
+                              {value} 年
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    }
+                  />
                 ) : (
                   <section className="panel">
                     <Empty title="财务总览" text="正在等待真实家庭记录。" />
@@ -534,16 +589,25 @@ export function FinanceApp({ page }: { page: Page }) {
                 ))}
               {page === "ledger" &&
                 (store ? (
-                  <MonthlyTable
-                    store={store}
-                    year={year}
-                    onOpen={(value, mode) => {
-                      setMonth(value);
-                      setLedgerMode(mode);
-                      setDirty(false);
-                      setNotice("");
-                    }}
-                  />
+                  <>
+                    <section aria-label={`${year} 年收支汇总`}>
+                      <div className="section-heading">
+                        <h2>本年汇总</h2>
+                        <p>{year} 年 · 已登记数据</p>
+                      </div>
+                      <AnnualMetrics store={store} year={year} />
+                    </section>
+                    <MonthlyTable
+                      store={store}
+                      year={year}
+                      onOpen={(value, mode) => {
+                        setMonth(value);
+                        setLedgerMode(mode);
+                        setDirty(false);
+                        setNotice("");
+                      }}
+                    />
+                  </>
                 ) : (
                   <section className="panel">
                     <Empty
@@ -698,8 +762,58 @@ function PanelTitle({
     </div>
   );
 }
-function Dashboard({ store, year, asOf }: { store: Store; year: string; asOf: string }) {
+function AnnualMetrics({ store, year }: { store: Store; year: string }) {
   const annual = annualSummary(store, year);
+  return (
+    <div className="metrics">
+      <Metric
+        label="总收入"
+        value={annual.incomeRecorded ? money(annual.income) : "—"}
+        note="本年已登记收入"
+        icon="banknote"
+        tone="green"
+      />
+      <Metric
+        label="总支出"
+        value={annual.expenseRecorded ? money(annual.expense) : "—"}
+        note="本年已登记支出"
+        icon="receipt"
+        tone="orange"
+      />
+      <Metric
+        label="总结余"
+        value={
+          annual.incomeRecorded || annual.expenseRecorded ? money(annual.savings) : "—"
+        }
+        note={
+          annual.recordedMonths > annual.completeMonths
+            ? "未完成月份仅计已记录差额"
+            : "已登记收入 − 已登记支出"
+        }
+        icon="savings"
+        tone="blue"
+      />
+      <Metric
+        label="储蓄率"
+        value={annual.rate ?? "暂不适用"}
+        note="记录完整且总收入为正时计算"
+        icon="percent"
+        tone="purple"
+      />
+    </div>
+  );
+}
+function Dashboard({
+  store,
+  year,
+  asOf,
+  yearControl,
+}: {
+  store: Store;
+  year: string;
+  asOf: string;
+  yearControl: ReactNode;
+}) {
   const balances = latestBalances(store, asOf);
   const total = balances.reduce((sum, balance) => sum + BigInt(balance.amountMinor), 0n);
   return (
@@ -707,46 +821,9 @@ function Dashboard({ store, year, asOf }: { store: Store; year: string; asOf: st
       <section className="annual-section" aria-labelledby="income-section">
         <div className="section-heading">
           <h2 id="income-section">收支</h2>
-          <p>{year} 年 · 截至所有已登记数据</p>
+          {yearControl}
         </div>
-        <div className="metrics">
-          <Metric
-            label="总收入"
-            value={annual.incomeRecorded ? money(annual.income) : "—"}
-            note="本年已登记收入"
-            icon="down"
-            tone="green"
-          />
-          <Metric
-            label="总支出"
-            value={annual.expenseRecorded ? money(annual.expense) : "—"}
-            note="本年已登记支出"
-            icon="up"
-            tone="orange"
-          />
-          <Metric
-            label="总结余"
-            value={
-              annual.incomeRecorded || annual.expenseRecorded
-                ? money(annual.savings)
-                : "—"
-            }
-            note="已登记收入 − 已登记支出"
-            icon="wallet"
-            tone="blue"
-          />
-          <Metric
-            label="储蓄率"
-            value={annual.rate ?? "暂不适用"}
-            note="记录完整且总收入为正时计算"
-            icon="grid"
-            tone="purple"
-          />
-        </div>
-        <p className="summary-note">
-          {annual.recordedMonths} 个月已登记，{annual.completeMonths} 个月收支完整。
-          汇总包含未完成月份；未完成时，结余仅为已记录差额，非全年最终数值。
-        </p>
+        <AnnualMetrics store={store} year={year} />
         <section className="panel">
           <PanelTitle
             title="每月收支趋势"
@@ -777,23 +854,14 @@ function Dashboard({ store, year, asOf }: { store: Store; year: string; asOf: st
             </span>
           </div>
         </div>
-        <div className="dashboard-grid">
-          <section className="panel">
-            <PanelTitle
-              title="资产趋势"
-              subtitle="每月末最近已知余额；当前月截至今天，未来月份不显示余额"
-            />
-            <AssetTrend store={store} year={year} asOf={asOf} />
-          </section>
-          <section className="panel">
-            <PanelTitle title="资产分布" subtitle="金融资产、房产及车辆" />
-            {balances.length ? (
-              <Composition store={store} asOf={asOf} owner="ALL" />
-            ) : (
-              <Empty title="尚未登记资产余额" text="登记实际余额后显示资产分布。" />
-            )}
-          </section>
-        </div>
+        <section className="panel asset-distribution">
+          <PanelTitle title="资产分布" subtitle="金融资产、房产及车辆" />
+          {balances.length ? (
+            <Composition store={store} asOf={asOf} owner="ALL" />
+          ) : (
+            <Empty title="尚未登记资产余额" text="登记实际余额后显示资产分布。" />
+          )}
+        </section>
       </section>
     </div>
   );
@@ -933,67 +1001,6 @@ function Trend({ store, year }: { store: Store; year: string }) {
                   <td>{p.incomeRecorded ? money(p.income) : "未记录"}</td>
                   <td>{p.expenseRecorded ? money(p.expense) : "未记录"}</td>
                   <td>{!p.recorded ? "未记录" : p.complete ? "完整" : "未完成"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-    </>
-  );
-}
-function AssetTrend({ store, year, asOf }: { store: Store; year: string; asOf: string }) {
-  const points = assetTrend(store, year, asOf);
-  const max = Math.max(1, ...points.map((point) => Number(point.total ?? 0n)));
-  return (
-    <>
-      <div className="chart asset-chart" aria-label={`${year} 年资产趋势`}>
-        {points.map((point, i) => (
-          <div
-            className="chart-column"
-            key={point.month}
-            title={`${point.month} ${point.total === null ? "未知或尚未到期" : money(point.total)}`}
-          >
-            <div className="chart-bars">
-              {point.total === null ? (
-                <span className="missing-bar" />
-              ) : (
-                <span
-                  className="income-bar"
-                  style={{ height: `${Math.max(2, (Number(point.total) / max) * 100)}%` }}
-                />
-              )}
-            </div>
-            <span>{i + 1}月</span>
-          </div>
-        ))}
-      </div>
-      <details className="chart-data">
-        <summary>查看资产趋势准确数值及估值日期</summary>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>月份</th>
-                <th className="numeric">最近已知总资产</th>
-                <th>各账户原始估值日期</th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((point) => (
-                <tr key={point.month}>
-                  <td>{point.month}</td>
-                  <td className="numeric">
-                    {point.total === null ? "未知或尚未到期" : money(point.total)}
-                  </td>
-                  <td>
-                    {point.balances
-                      .map(
-                        (balance) =>
-                          `${store.accounts.find((account) => account.id === balance.accountId)?.name}：${balance.asOf}`,
-                      )
-                      .join("；") || "—"}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1303,17 +1310,6 @@ function Assets({
         </button>
       </div>
       <section className="panel">
-        <PanelTitle
-          title="资产趋势"
-          subtitle="所选年份各月最近已知余额；未登记余额不视为零"
-        />
-        <AssetTrend
-          store={store}
-          year={month.slice(0, 4)}
-          asOf={monthEnd(month) < today() ? monthEnd(month) : today()}
-        />
-      </section>
-      <section className="panel history-panel">
         <PanelTitle title="账户与资产" subtitle="查看每个余额的实际记录日期" />
         <div className="table-scroll">
           <table>

@@ -166,14 +166,12 @@ input[type="month"] {
   font-size: 22px;
   letter-spacing: -0.8px;
 }
-.brand-mark {
-  background: var(--green);
-  color: #fff;
-  border-radius: 12px;
-  width: 39px;
-  height: 41px;
-  display: grid;
-  place-items: center;
+.profile-avatar {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 .brand small {
   display: block;
@@ -230,7 +228,7 @@ input[type="month"] {
 .brand-access .login-button {
   flex: 0 0 44px;
 }
-.brand > span:last-child {
+.brand-name {
   white-space: nowrap;
 }
 .sidebar-toggle {
@@ -259,20 +257,22 @@ input[type="month"] {
 .section-heading h2 {
   font-size: 22px;
 }
-.section-heading p,
-.summary-note {
+.section-heading p {
   color: #607369;
   font-size: 12px;
   line-height: 1.8;
 }
-.summary-note {
-  margin: -8px 0 20px;
+.year-control select {
+  min-height: 44px;
 }
 .annual-section + .annual-section {
   margin-top: 40px;
 }
-.annual-dashboard .dashboard-grid {
-  margin-bottom: 0;
+.asset-distribution .composition {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 24px;
 }
 .row-actions {
   display: flex;
@@ -439,12 +439,6 @@ main {
   font-size: 10px;
   color: #99a394;
   line-height: 1.6;
-}
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 1.65fr 1fr;
-  gap: 22px;
-  margin-bottom: 23px;
 }
 .panel {
   background: #fff;
@@ -1224,11 +1218,6 @@ main {
     font-size: 18px;
     gap: 8px;
   }
-  .guest-shell .brand-mark {
-    width: 32px;
-    height: 34px;
-    border-radius: 10px;
-  }
   .landing-main {
     padding: 32px 24px;
   }
@@ -1314,10 +1303,6 @@ main {
   .metric-value {
     font-size: 21px;
   }
-  .dashboard-grid {
-    grid-template-columns: 1.4fr 1fr;
-    gap: 16px;
-  }
   .account-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1359,9 +1344,6 @@ main {
   .sidebar-toggle {
     margin-top: 16px;
   }
-  .sidebar .brand-access {
-    justify-content: space-between;
-  }
   .nav-item {
     padding: 9px 10px;
     font-size: 11px;
@@ -1382,9 +1364,6 @@ main {
   }
   .metrics {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .dashboard-grid {
-    grid-template-columns: 1.5fr 1fr;
   }
   .page-heading {
     align-items: flex-end;
@@ -1426,8 +1405,9 @@ main {
   .filters label {
     flex: 1;
   }
-  .dashboard-grid {
+  .asset-distribution .composition {
     grid-template-columns: 1fr;
+    gap: 0;
   }
   .metric {
     padding: 16px;
@@ -1510,7 +1490,7 @@ main {
     width: 100%;
   }
 }
-.sidebar-collapsed .brand > span:last-child,
+.sidebar-collapsed .brand-name,
 .sidebar-collapsed .nav-label,
 .sidebar-collapsed .space-label,
 .sidebar-collapsed .nav-dot,

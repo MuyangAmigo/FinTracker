@@ -53,16 +53,22 @@ try {
       if (
         !loginBox ||
         !brandBox ||
-        loginBox.x < brandBox.x + brandBox.width ||
-        loginBox.x - brandBox.x - brandBox.width > 20
+        brandBox.x < loginBox.x + loginBox.width ||
+        brandBox.x - loginBox.x - loginBox.width > 20
       )
         throw new Error(`Login is not beside the brand at ${width}px`);
       if (loginBox.width !== 44 || loginBox.height !== 44)
         throw new Error(`Profile login must have a 44px touch target at ${width}px`);
       if ((await login.textContent()) !== "")
         throw new Error(`Profile login must be icon-only: ${path}`);
-      if (!(await login.locator("svg circle").isVisible()))
-        throw new Error(`Profile icon is not visible at ${width}px: ${path}`);
+      const avatar = login.locator("img.profile-avatar");
+      if (
+        !(await avatar.isVisible()) ||
+        !(await avatar.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+        ))
+      )
+        throw new Error(`Personal avatar is not visible at ${width}px: ${path}`);
       if (
         (await page.locator(".landing-access, .landing-explore").count()) ||
         (await page

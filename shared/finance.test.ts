@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   balanceInput,
   annualSummary,
-  assetTrend,
   cashFlow,
   csv,
   dateSchema,
@@ -174,23 +173,6 @@ describe("exact finance behavior", () => {
     expect(january.rate).toBeNull();
     expect(monthlySummary(data, "2024-02").recorded).toBe(false);
     expect(annualSummary(data, "2025").incomeRecorded).toBe(false);
-  });
-  it("carries each asset's prior valuation through annual trends without filling unknown or future months", () => {
-    const points = assetTrend(store, "2024", "2024-04-15");
-    expect(points[0].total).toBe(10000n);
-    expect(points[1].total).toBe(10000n);
-    expect(points[1].balances[0].asOf).toBe("2024-01-31");
-    expect(points[2].total).toBe(9000n);
-    expect(points[3].total).toBe(9000n);
-    expect(points[4].total).toBeNull();
-    expect(assetTrend(store, "2023", "2023-12-31").every((p) => p.total === null)).toBe(
-      true,
-    );
-    const zero: Store = {
-      ...store,
-      balances: [{ ...store.balances[0], amountMinor: "0" }],
-    };
-    expect(assetTrend(zero, "2024", "2024-02-15")[0].total).toBe(0n);
   });
   it("rejects duplicate batch rows and negative assets", () => {
     expect(

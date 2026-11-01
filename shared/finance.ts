@@ -262,22 +262,6 @@ export function annualSummary(store: Store, year: string) {
     ),
   };
 }
-export function assetTrend(store: Store, year: string, asOf: string) {
-  return Array.from({ length: 12 }, (_, i) => {
-    const month = `${year}-${String(i + 1).padStart(2, "0")}`;
-    const end = monthEnd(month);
-    const cutoff = end < asOf ? end : asOf;
-    const balances =
-      month.slice(0, 7) <= asOf.slice(0, 7) ? latestBalances(store, cutoff) : [];
-    return {
-      month,
-      balances,
-      total: balances.length
-        ? balances.reduce((sum, balance) => sum + BigInt(balance.amountMinor), 0n)
-        : null,
-    };
-  });
-}
 export function csv(rows: (string | null)[][]): string {
   return (
     "\uFEFF" +

@@ -21,10 +21,11 @@ database or a server API. Without configured authentication/backend, the site
 shows a setup notice and does not pretend to contain or save records.
 
 Signed-out visitors see a dedicated landing page on every finance route, with
-an accessible profile-icon button for Microsoft sign-in beside the FinTracker brand.
+an accessible personal-avatar button for Microsoft sign-in in place of the
+FinTracker brand icon.
 No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
-the requested workspace. The sidebar groups the brand and sign-out icon together,
+the requested workspace. The sidebar uses the same brand avatar for sign-out,
 with the navigation collapse control at the bottom; there is no workspace top banner.
 
 Finance routes share one authenticated, in-memory session. Navigation reuses the
@@ -85,17 +86,19 @@ users. Keep the password in private local configuration, not source code.
 
 ## Monthly records and assets
 
-- The overview defaults to the current year, with a year selector and two sections:
+- The overview defaults to the current year, with a year selector in the
+  income/spending heading and two sections:
   income/spending and assets. Annual totals include all recorded amounts, including
   partial months; savings rates require complete recorded months and positive income.
   Missing income and spending remain distinct from explicitly recorded zero.
-- Monthly accounting lists the selected year's twelve months in descending order.
+- Monthly accounting shows the same annual totals above the selected year's
+  twelve months in descending order. Collapsed navigation hides the brand text
+  while keeping the avatar and navigation controls within the sidebar.
   View and edit open in dialogs; closing an unsaved edit requires confirmation.
   Household-owner filters and currency captions are omitted, not ownership checks.
 - Asset distribution uses the latest known balances as of the selected year end
-  (today for the current year). Monthly asset trends carry forward each account's
-  latest valuation, retain its original date in the exact-value table, and do not
-  project future months. Asset management also includes this monthly trend.
+  (today for the current year). Asset management retains account balances and
+  their valuation history; asset trend charts are not shown.
 - Add income sources, accounts, owners, and asset items from the interface.
 - One month/account or month/income-source row represents the monthly amount.
   Blank is unrecorded; `0.00` is explicitly recorded zero.

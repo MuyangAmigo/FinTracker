@@ -316,8 +316,10 @@ describe("household interface", () => {
       const login = screen.getByRole("button", { name: "Microsoft 登录" });
       expect(login.textContent).toBe("");
       expect(login.getAttribute("title")).toBe("Microsoft 登录");
-      expect(login.querySelectorAll("svg")).toHaveLength(1);
-      expect(login.querySelector("svg circle")).not.toBeNull();
+      expect(login.querySelectorAll("svg")).toHaveLength(0);
+      expect(login.querySelector("img")?.getAttribute("src")).toBe(
+        `${publicConfig.basePath}/favicon.png`,
+      );
       expect(
         screen.queryByText("右上角使用 Microsoft 账户登录，仅限获准的家庭成员。"),
       ).toBeNull();
@@ -428,14 +430,22 @@ describe("household interface", () => {
         .querySelector(".brand-access")!
         .contains(screen.getByRole("button", { name: "退出登录" })),
     ).toBe(true);
+    expect(sidebar.querySelector(".brand")!.firstElementChild).toBe(
+      screen.getByRole("button", { name: "退出登录" }),
+    );
+    expect(sidebar.querySelectorAll(".profile-avatar")).toHaveLength(1);
+    expect(sidebar.querySelector(".brand-mark")).toBeNull();
     expect(sidebar.lastElementChild).toBe(
       screen.getByRole("button", { name: "收起导航栏" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "收起导航栏" }));
     expect(container.querySelector(".sidebar-collapsed")).not.toBeNull();
+    expect(sidebar.querySelector(".brand-name")).toBeNull();
+    expect(sidebar.querySelector(".profile-avatar")).not.toBeNull();
     expect(screen.getByRole("link", { name: "月度记账" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "展开导航栏" }));
     expect(container.querySelector(".sidebar-collapsed")).toBeNull();
+    expect(sidebar.querySelector(".brand-name")).not.toBeNull();
   });
   it("shows the selected year's two overview sections without monthly spending or owner/currency filters", async () => {
     const { container } = render(<FinanceApp page="dashboard" />);
@@ -445,10 +455,18 @@ describe("household interface", () => {
     );
     fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
     expect(container.querySelectorAll(".annual-section")).toHaveLength(2);
+    expect(container.querySelector(".filter-bar")).toBeNull();
+    expect(container.querySelector(".summary-note")).toBeNull();
+    expect(
+      container
+        .querySelector(".section-heading")!
+        .contains(screen.getByLabelText("记录年份")),
+    ).toBe(true);
     expect(container.querySelector(".metric-value")!.textContent).toBe("¥100.00");
     expect(screen.getByText("100.00%")).toBeTruthy();
     expect(screen.getByLabelText("2024 年收支趋势")).toBeTruthy();
-    expect(screen.getByLabelText("2024 年资产趋势")).toBeTruthy();
+    expect(screen.queryByLabelText("2024 年资产趋势")).toBeNull();
+    expect(screen.getByRole("heading", { name: "资产分布" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "本月账户支出" })).toBeNull();
     expect(screen.queryByLabelText("归属筛选")).toBeNull();
     expect(screen.queryByText(/CNY/)).toBeNull();
@@ -470,6 +488,24 @@ describe("household interface", () => {
     expect(within(dialog).queryByRole("button", { name: "保存本月记录" })).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("shows the selected year's totals above monthly accounting and keeps missing years unknown", async () => {
+    render(<FinanceApp page="ledger" />);
+    await screen.findByRole("heading", { name: "本年汇总" });
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    const summary = screen.getByRole("region", { name: "2024 年收支汇总" });
+    expect(summary.querySelectorAll(".metric")).toHaveLength(4);
+    expect(summary.querySelector(".metric-value")!.textContent).toBe("¥100.00");
+    expect(within(summary).getByText("100.00%")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("记录年份"), {
+      target: { value: String(new Date().getFullYear()) },
+    });
+    expect(
+      screen
+        .getByRole("heading", { name: "本年汇总" })
+        .closest("section")!
+        .querySelector(".metric-value")!.textContent,
+    ).toBe("—");
   });
   it("protects unsaved monthly edits on close and Escape", async () => {
     render(<FinanceApp page="ledger" />);
@@ -555,6 +591,8 @@ describe("household interface", () => {
   it("updates selected assets only and never resets omitted accounts", async () => {
     render(<FinanceApp page="assets" />);
     await screen.findAllByText("Bank A");
+    expect(screen.queryByRole("heading", { name: "资产趋势" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "估值历史" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "登记新的余额" }));
     fireEvent.change(screen.getByLabelText("Bank A 余额"), {
       target: { value: "250.00" },
