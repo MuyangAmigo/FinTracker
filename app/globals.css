@@ -2,11 +2,9 @@
 body .page-heading p,
 body .metric-note,
 body .panel-title p,
-body .filter-caption,
 body .empty p,
 body .muted,
 body .checkbox,
-body .annual-summary,
 body .chart-column,
 body .chart-data,
 body .export-bar,
@@ -20,26 +18,6 @@ body .owner-tag {
 body .old-balance,
 body .data-warning {
   color: #775b23;
-}
-.annual-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  align-items: center;
-  margin: 0 0 24px;
-  color: #889780;
-  font-size: 11px;
-}
-.annual-summary strong {
-  color: #51664c;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  margin-left: 5px;
-}
-.annual-summary small {
-  color: #a7ad9d;
-  margin-left: auto;
-  font-size: 10px;
 }
 :root {
   --canvas: #f6f8f5;
@@ -170,7 +148,7 @@ input[type="month"] {
   min-height: 100vh;
 }
 .sidebar {
-  width: 238px;
+  width: 280px;
   position: fixed;
   inset: 0 auto 0 0;
   border-right: 1px solid var(--border);
@@ -241,8 +219,83 @@ input[type="month"] {
   margin-left: auto;
 }
 .workspace {
-  margin-left: 238px;
-  width: calc(100% - 238px);
+  margin-left: 280px;
+  width: calc(100% - 280px);
+}
+.brand-access {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-access .login-button {
+  flex: 0 0 44px;
+}
+.brand > span:last-child {
+  white-space: nowrap;
+}
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-top: auto;
+  padding: 12px;
+  background: #ecf5ef;
+  border-radius: 9px;
+  color: var(--green);
+  text-align: left;
+}
+.sidebar-toggle svg {
+  transform: rotate(180deg);
+}
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.section-heading h2 {
+  font-size: 22px;
+}
+.section-heading p,
+.summary-note {
+  color: #607369;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.summary-note {
+  margin: -8px 0 20px;
+}
+.annual-section + .annual-section {
+  margin-top: 40px;
+}
+.annual-dashboard .dashboard-grid {
+  margin-bottom: 0;
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+.row-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+}
+.monthly-dialog {
+  padding: 24px;
+}
+.modal-wide {
+  width: min(1040px, calc(100vw - 32px));
+}
+.modal-header .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.asset-summary strong,
+.asset-summary span {
+  overflow-wrap: anywhere;
 }
 .topbar {
   height: 73px;
@@ -286,12 +339,6 @@ main {
   gap: 16px;
   margin-bottom: 26px;
 }
-.eyebrow {
-  font-size: 9px;
-  color: #96a091;
-  letter-spacing: 2.4px;
-  margin-bottom: 12px;
-}
 .page-heading p {
   color: #8a9389;
   margin-top: 9px;
@@ -321,13 +368,6 @@ main {
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 22px;
-}
-.segmented {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  color: #8f998e;
-  font-size: 11px;
 }
 .selected {
   background: #fff;
@@ -497,20 +537,11 @@ main {
 }
 .subtle-link {
   background: transparent;
+  white-space: nowrap;
 }
 .table-scroll {
   overflow-x: auto;
   max-width: 100%;
-}
-.row-icon {
-  display: inline-grid;
-  place-items: center;
-  background: #f3f6ef;
-  color: #92a284;
-  padding: 6px;
-  border-radius: 6px;
-  vertical-align: middle;
-  margin-right: 10px;
 }
 .owner-tag {
   background: #f4f6f0;
@@ -816,6 +847,7 @@ main {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 0;
+  margin: auto;
   background: #fff;
   color: var(--ink);
   box-shadow: 0 22px 70px #10200a30;
@@ -830,6 +862,10 @@ main {
   align-items: center;
   padding: 23px 26px;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--white);
 }
 .icon-button {
   background: transparent;
@@ -898,10 +934,6 @@ main {
 .guest-shell .brand small {
   color: var(--muted);
   letter-spacing: 2px;
-}
-.topbar-actions {
-  display: flex;
-  align-items: center;
 }
 .login-button {
   display: grid;
@@ -1259,13 +1291,13 @@ main {
 }
 @media (max-width: 1150px) {
   .sidebar {
-    width: 205px;
+    width: 260px;
     padding-left: 16px;
     padding-right: 16px;
   }
   .workspace {
-    margin-left: 205px;
-    width: calc(100% - 205px);
+    margin-left: 260px;
+    width: calc(100% - 260px);
   }
   main {
     padding: 30px 25px;
@@ -1324,6 +1356,12 @@ main {
     gap: 5px;
     justify-content: space-between;
   }
+  .sidebar-toggle {
+    margin-top: 16px;
+  }
+  .sidebar .brand-access {
+    justify-content: space-between;
+  }
   .nav-item {
     padding: 9px 10px;
     font-size: 11px;
@@ -1350,9 +1388,6 @@ main {
   }
   .page-heading {
     align-items: flex-end;
-  }
-  .eyebrow {
-    font-size: 8px;
   }
 }
 @media (max-width: 600px) {
@@ -1446,6 +1481,9 @@ main {
   .modal-form {
     padding: 20px;
   }
+  .monthly-dialog {
+    padding: 16px;
+  }
   .save-bar {
     align-items: flex-start;
     gap: 15px;
@@ -1470,5 +1508,36 @@ main {
   }
   .export-bar > span {
     width: 100%;
+  }
+}
+.sidebar-collapsed .brand > span:last-child,
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .space-label,
+.sidebar-collapsed .nav-dot,
+.sidebar-collapsed .sidebar-toggle span {
+  display: none;
+}
+.sidebar-collapsed .sidebar-toggle svg {
+  transform: none;
+}
+@media (min-width: 851px) {
+  .sidebar-collapsed .sidebar {
+    width: 88px;
+    padding: 24px 16px 20px;
+  }
+  .sidebar-collapsed .brand-access {
+    flex-direction: column;
+  }
+  .sidebar-collapsed nav {
+    margin-top: 32px;
+  }
+  .sidebar-collapsed .nav-item,
+  .sidebar-collapsed .sidebar-toggle {
+    justify-content: center;
+    padding: 12px;
+  }
+  .sidebar-collapsed .workspace {
+    margin-left: 88px;
+    width: calc(100% - 88px);
   }
 }

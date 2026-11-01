@@ -47,8 +47,16 @@ try {
       )
         throw new Error(`Signed-out page contains workspace UI: ${path}`);
       const loginBox = await login.boundingBox();
-      if (!loginBox || loginBox.x + loginBox.width / 2 < width / 2)
-        throw new Error(`Login is not in the top-right header at ${width}px`);
+      const brandBox = await page
+        .getByRole("link", { name: "FinTracker 首页" })
+        .boundingBox();
+      if (
+        !loginBox ||
+        !brandBox ||
+        loginBox.x < brandBox.x + brandBox.width ||
+        loginBox.x - brandBox.x - brandBox.width > 20
+      )
+        throw new Error(`Login is not beside the brand at ${width}px`);
       if (loginBox.width !== 44 || loginBox.height !== 44)
         throw new Error(`Profile login must have a 44px touch target at ${width}px`);
       if ((await login.textContent()) !== "")

@@ -220,6 +220,64 @@ export function latestBalances(store: Store, asOf: string, owner: string = "ALL"
     (b) => owner === "ALL" || (b.ownerId ?? "SHARED") === owner,
   );
 }
+export function monthlySummary(store: Store, month: string) {
+  const period = store.periods.find((p) => p.month === month);
+  const kinds = new Map(store.lines.map((line) => [line.id, line.kind]));
+  const entries = store.entries.filter((entry) => entry.month === month);
+  const incomeRecorded =
+    Boolean(period?.incomeComplete) ||
+    entries.some((entry) => kinds.get(entry.lineId) === "INCOME");
+  const expenseRecorded =
+    Boolean(period?.expenseComplete) ||
+    entries.some((entry) => kinds.get(entry.lineId) === "EXPENSE");
+  const complete = Boolean(period?.incomeComplete && period.expenseComplete);
+  const flow = cashFlow(store, month);
+  return {
+    month,
+    ...flow,
+    incomeRecorded,
+    expenseRecorded,
+    recorded: Boolean(period) || entries.length > 0,
+    complete,
+    rate: savingsRate(flow.income, flow.expense, complete),
+  };
+}
+export function annualSummary(store: Store, year: string) {
+  const months = Array.from({ length: 12 }, (_, i) =>
+    monthlySummary(store, `${year}-${String(i + 1).padStart(2, "0")}`),
+  );
+  const recorded = months.filter((month) => month.recorded);
+  const flow = cashFlow(store, year);
+  return {
+    ...flow,
+    months,
+    incomeRecorded: months.some((month) => month.incomeRecorded),
+    expenseRecorded: months.some((month) => month.expenseRecorded),
+    recordedMonths: recorded.length,
+    completeMonths: recorded.filter((month) => month.complete).length,
+    rate: savingsRate(
+      flow.income,
+      flow.expense,
+      recorded.length > 0 && recorded.every((month) => month.complete),
+    ),
+  };
+}
+export function assetTrend(store: Store, year: string, asOf: string) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = `${year}-${String(i + 1).padStart(2, "0")}`;
+    const end = monthEnd(month);
+    const cutoff = end < asOf ? end : asOf;
+    const balances =
+      month.slice(0, 7) <= asOf.slice(0, 7) ? latestBalances(store, cutoff) : [];
+    return {
+      month,
+      balances,
+      total: balances.length
+        ? balances.reduce((sum, balance) => sum + BigInt(balance.amountMinor), 0n)
+        : null,
+    };
+  });
+}
 export function csv(rows: (string | null)[][]): string {
   return (
     "\uFEFF" +

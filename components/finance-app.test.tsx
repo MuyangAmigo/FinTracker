@@ -6,6 +6,7 @@ import {
   fireEvent,
   render as renderView,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import { StrictMode, type ReactElement } from "react";
@@ -36,6 +37,14 @@ vi.mock("../lib/client", async () => {
 let store: Store;
 function render(ui: ReactElement) {
   return renderView(ui, { wrapper: FinanceProvider });
+}
+async function editMonth(month = "2024-01") {
+  await screen.findByRole("table");
+  fireEvent.change(screen.getByLabelText("记录年份"), {
+    target: { value: month.slice(0, 4) },
+  });
+  fireEvent.click(screen.getByRole("button", { name: `编辑 ${month}` }));
+  return screen.findByLabelText("Salary 金额");
 }
 beforeEach(() => {
   mocks.configured = true;
@@ -144,7 +153,8 @@ describe("household interface", () => {
     await waitFor(() => expect(mocks.request).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     view.rerender(<FinanceApp key="ledger" page="ledger" />);
-    expect(screen.getByLabelText("Salary 金额")).toBeTruthy();
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.queryByLabelText("Salary 金额")).toBeNull();
     view.rerender(<FinanceApp key="assets" page="assets" />);
     expect(screen.getAllByText("Bank A").length).toBeGreaterThan(0);
     expect(mocks.createAuth).toHaveBeenCalledTimes(1);
@@ -159,7 +169,7 @@ describe("household interface", () => {
         </FinanceProvider>
       </StrictMode>,
     );
-    await screen.findByLabelText("Salary 金额");
+    await editMonth();
     expect(mocks.createAuth).toHaveBeenCalledTimes(1);
     expect(mocks.request).toHaveBeenCalledTimes(1);
   });
@@ -190,7 +200,7 @@ describe("household interface", () => {
       expect(mocks.request).toHaveBeenCalledTimes(3);
       expect(screen.queryByRole("alert")).toBeNull();
       view.rerender(<FinanceApp key="ledger-again" page="ledger" />);
-      expect(screen.getByLabelText("Salary 金额")).toBeTruthy();
+      expect(screen.getByRole("table")).toBeTruthy();
       expect(mocks.request).toHaveBeenCalledTimes(3);
     },
   );
@@ -209,7 +219,7 @@ describe("household interface", () => {
   });
   it("clears financial records before signing out", async () => {
     render(<FinanceApp page="ledger" />);
-    await screen.findByLabelText("Salary 金额");
+    await editMonth();
     fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
     expect(screen.queryByLabelText("Salary 金额")).toBeNull();
     expect(screen.queryByRole("navigation")).toBeNull();
@@ -217,7 +227,7 @@ describe("household interface", () => {
   });
   it("removes cached records if access is revoked during a refresh", async () => {
     render(<FinanceApp page="ledger" />);
-    await screen.findByLabelText("Salary 金额");
+    await editMonth();
     mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
     fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
     await screen.findAllByRole("alert");
@@ -230,7 +240,7 @@ describe("household interface", () => {
     "clears cached records and invalidates pending loads when a save returns %s",
     async (status) => {
       const view = render(<FinanceApp key="ledger" page="ledger" />);
-      await screen.findByLabelText("Salary 金额");
+      await editMonth();
       mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
       fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
       await screen.findByRole("button", { name: "重新加载" });
@@ -265,7 +275,7 @@ describe("household interface", () => {
     ),
   )("clears cached records when $button returns $status", async ({ status, button }) => {
     const view = render(<FinanceApp key="ledger" page="ledger" />);
-    await screen.findByLabelText("Salary 金额");
+    await editMonth();
     mocks.request.mockRejectedValueOnce(new ApiError(status, "访问权限已撤销"));
     fireEvent.click(screen.getByRole("button", { name: button }));
     await waitFor(() => expect(screen.queryByLabelText("Salary 金额")).toBeNull());
@@ -394,8 +404,10 @@ describe("household interface", () => {
     const { container } = render(<FinanceApp page="dashboard" />);
     await screen.findByRole("button", { name: "退出登录" });
     expect(screen.getByRole("navigation", { name: "主导航" })).toBeTruthy();
-    expect(screen.getByLabelText("记录月份")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "本月账户支出" })).toBeTruthy();
+    expect(screen.getByLabelText("记录年份")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "收支" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "资产" })).toBeTruthy();
+    expect(screen.queryByRole("banner")).toBeNull();
     expect(container.querySelector(".landing-hero")).toBeNull();
     expect(container.querySelector(".sidebar-note, .sidebar-bottom, footer")).toBeNull();
     await waitFor(() =>
@@ -407,10 +419,81 @@ describe("household interface", () => {
       ),
     );
   });
+  it("groups profile access with the brand and places collapse after navigation", async () => {
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    const sidebar = container.querySelector(".sidebar")!;
+    expect(
+      sidebar
+        .querySelector(".brand-access")!
+        .contains(screen.getByRole("button", { name: "退出登录" })),
+    ).toBe(true);
+    expect(sidebar.lastElementChild).toBe(
+      screen.getByRole("button", { name: "收起导航栏" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "收起导航栏" }));
+    expect(container.querySelector(".sidebar-collapsed")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "月度记账" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "展开导航栏" }));
+    expect(container.querySelector(".sidebar-collapsed")).toBeNull();
+  });
+  it("shows the selected year's two overview sections without monthly spending or owner/currency filters", async () => {
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    expect((screen.getByLabelText("记录年份") as HTMLSelectElement).value).toBe(
+      String(new Date().getFullYear()),
+    );
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    expect(container.querySelectorAll(".annual-section")).toHaveLength(2);
+    expect(container.querySelector(".metric-value")!.textContent).toBe("¥100.00");
+    expect(screen.getByText("100.00%")).toBeTruthy();
+    expect(screen.getByLabelText("2024 年收支趋势")).toBeTruthy();
+    expect(screen.getByLabelText("2024 年资产趋势")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "本月账户支出" })).toBeNull();
+    expect(screen.queryByLabelText("归属筛选")).toBeNull();
+    expect(screen.queryByText(/CNY/)).toBeNull();
+  });
+  it("lists twelve months in descending order and opens read-only details", async () => {
+    render(<FinanceApp page="ledger" />);
+    await screen.findByRole("table");
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(12);
+    expect(rows[0].firstElementChild!.textContent).toBe("2024-12");
+    expect(rows[11].firstElementChild!.textContent).toBe("2024-01");
+    expect(screen.queryByLabelText("Salary 金额")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "查看 2024-01" }));
+    const dialog = screen.getByRole("dialog", { name: "2024-01 收支详情" });
+    expect(within(dialog).getByText("Salary")).toBeTruthy();
+    expect(within(dialog).getByText("¥100.00")).toBeTruthy();
+    expect(within(dialog).queryByRole("textbox")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "保存本月记录" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("protects unsaved monthly edits on close and Escape", async () => {
+    render(<FinanceApp page="ledger" />);
+    await editMonth();
+    fireEvent.change(screen.getByLabelText("Salary 金额"), {
+      target: { value: "250.00" },
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.getByRole("dialog").hasAttribute("open")).toBe(true);
+    fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));
+    expect(screen.getByRole("dialog").hasAttribute("open")).toBe(true);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await editMonth();
+    expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
+      "100.00",
+    );
+  });
   it("saves a monthly batch through the API and reloads persisted records", async () => {
     render(<FinanceApp page="ledger" />);
-    await screen.findByLabelText("Salary 金额");
-    fireEvent.change(screen.getByLabelText("记录月份"), { target: { value: "2024-01" } });
+    await editMonth();
     await waitFor(() =>
       expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
         "100.00",
@@ -423,14 +506,15 @@ describe("household interface", () => {
     await screen.findByText("已保存");
     const call = mocks.request.mock.calls.find((args) => args[1] === "months/2024-01");
     expect(monthInput.parse(call?.[3]).entries[0].amount).toBe("123.45");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await editMonth();
     expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
       "123.45",
     );
   });
   it("reloads after a save even if an earlier refresh is still pending", async () => {
     render(<FinanceApp page="ledger" />);
-    await screen.findByLabelText("Salary 金额");
-    fireEvent.change(screen.getByLabelText("记录月份"), { target: { value: "2024-01" } });
+    await editMonth();
     mocks.request.mockRejectedValueOnce(new Error("保存失败"));
     fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
     await screen.findByRole("button", { name: "重新加载" });
@@ -452,6 +536,7 @@ describe("household interface", () => {
       mocks.request.mock.calls.filter((call) => call[1] === "bootstrap"),
     ).toHaveLength(3);
     await act(async () => finishLoad(new Response(oldResponse)));
+    await editMonth();
     expect((screen.getByLabelText("Salary 金额") as HTMLInputElement).value).toBe(
       "234.56",
     );
@@ -460,9 +545,11 @@ describe("household interface", () => {
     render(<FinanceApp page="assets" />);
     await screen.findAllByText("Bank A");
     fireEvent.change(screen.getByLabelText("记录月份"), { target: { value: "2024-01" } });
-    fireEvent.change(screen.getByLabelText("归属筛选"), { target: { value: "SHARED" } });
+    expect(screen.queryByLabelText("归属筛选")).toBeNull();
     await waitFor(() => expect(screen.getAllByText("Bank A").length).toBeGreaterThan(0));
-    expect(screen.queryByText("Bank B")).toBeNull();
+    expect(screen.getByText("Bank B")).toBeTruthy();
+    const row = screen.getAllByText("Bank A")[0].closest("tr")!;
+    expect(within(row).getByText("共同")).toBeTruthy();
     expect(screen.getAllByText("¥100.00").length).toBeGreaterThan(0);
   });
   it("updates selected assets only and never resets omitted accounts", async () => {
