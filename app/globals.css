@@ -37,7 +37,7 @@ body .data-warning {
   --weight-heading: 650;
   --weight-bold: 700;
   --weight-brand: 750;
-  --focus-inner: #26745b66;
+  --focus-inner: var(--green);
   --focus-outer: #26745b33;
 }
 * {
@@ -84,6 +84,9 @@ a:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 4px;
+}
+.references > summary:focus-visible {
+  outline-offset: -4px;
 }
 button {
   cursor: pointer;
@@ -1619,7 +1622,6 @@ details[open]::details-content {
     --weight-heading: 610;
     --weight-bold: 660;
     --weight-brand: 710;
-    --focus-inner: #94cdb199;
     --focus-outer: #94cdb14d;
   }
   body
@@ -1759,5 +1761,12 @@ details[open]::details-content {
   select,
   details::details-content {
     transition: none;
+  }
+}
+@media (forced-colors: active) {
+  input:focus,
+  select:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

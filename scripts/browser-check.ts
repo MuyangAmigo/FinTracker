@@ -173,6 +173,10 @@ try {
           <select aria-label="Synthetic select check"><option>2024</option></select>
           <h2>Heading</h2><strong>Strong</strong><p>Body</p>
         </div></div>
+        <details class="panel references">
+          <summary>Synthetic reference focus check</summary>
+          <div class="disclosure-content"><p>Reference content</p></div>
+        </details>
         <details class="chart-data">
           <summary>Synthetic disclosure check</summary>
           <div class="disclosure-content"><div class="table-scroll">
@@ -221,6 +225,16 @@ try {
             return Array.from(context.getImageData(0, 0, 1, 1).data);
           }),
         ),
+        focusColors: ["--focus-inner", ...lightness.map((_, i) => `--surface-${i}`)].map(
+          (token) => {
+            context.clearRect(0, 0, 1, 1);
+            context.fillStyle = getComputedStyle(document.documentElement)
+              .getPropertyValue(token)
+              .trim();
+            context.fillRect(0, 0, 1, 1);
+            return Array.from(context.getImageData(0, 0, 1, 1).data);
+          },
+        ),
       };
     }, colorScheme);
     const expectedWeights =
@@ -243,6 +257,21 @@ try {
       styles.border !== styles.focusedBorder
     )
       throw new Error(`Input focus must use shadows, not an outline or border change`);
+    const luminances = styles.focusColors.map(([r, g, b, alpha]) => {
+      if (alpha !== 255) throw new Error("The inner focus ring must be opaque");
+      const linear = [r, g, b].map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+    });
+    for (const surface of luminances.slice(1)) {
+      const contrast =
+        (Math.max(luminances[0], surface) + 0.05) /
+        (Math.min(luminances[0], surface) + 0.05);
+      if (contrast < 3)
+        throw new Error(`${colorScheme} focus contrast ${contrast} is below 3:1`);
+    }
     if (
       styles.numeric !== "tabular-nums" ||
       styles.wrap !== "pretty" ||
@@ -256,8 +285,24 @@ try {
         return shadow.includes("0px 0px 0px 2px") && shadow.includes("0px 0px 0px 5px");
       }, `#presentation-check ${control}`);
     }
-    const summary = page.locator("#presentation-check summary");
-    const content = page.locator("#presentation-check .disclosure-content");
+    const reference = page.locator("#presentation-check .references summary");
+    await reference.focus();
+    const referenceFocus = await reference.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        style: style.outlineStyle,
+        width: parseFloat(style.outlineWidth),
+        offset: parseFloat(style.outlineOffset),
+      };
+    });
+    if (
+      referenceFocus.style !== "solid" ||
+      referenceFocus.width < 2 ||
+      referenceFocus.offset > -referenceFocus.width
+    )
+      throw new Error("The reference summary focus ring must stay inside its panel");
+    const summary = page.locator("#presentation-check .chart-data summary");
+    const content = page.locator("#presentation-check .chart-data .disclosure-content");
     if ((await content.boundingBox())!.height !== 0)
       throw new Error("Closed disclosure must have zero height");
     await summary.focus();
@@ -273,7 +318,7 @@ try {
     await page.waitForFunction(
       () =>
         document
-          .querySelector("#presentation-check .disclosure-content")!
+          .querySelector("#presentation-check .chart-data .disclosure-content")!
           .getBoundingClientRect().height >= 120,
     );
     await page.keyboard.press("Tab");
@@ -294,23 +339,51 @@ try {
     await page.waitForFunction(
       () =>
         document
-          .querySelector("#presentation-check .disclosure-content")!
+          .querySelector("#presentation-check .chart-data .disclosure-content")!
           .getBoundingClientRect().height === 0,
     );
     await page.emulateMedia({ reducedMotion: "reduce" });
     await summary.click();
     const reduced = await page
-      .locator("#presentation-check details")
+      .locator("#presentation-check .chart-data")
       .evaluate(
         (element) => getComputedStyle(element, "::details-content").transitionDuration,
       );
     if (reduced !== "0s")
       throw new Error("Reduced motion must disable disclosure transitions");
+    await page.emulateMedia({ forcedColors: "active" });
+    for (const control of ["input", "select"]) {
+      const field = page.locator(`#presentation-check ${control}`);
+      await field.focus();
+      const forcedFocus = await field.evaluate((element) => {
+        const probe = document.createElement("span");
+        probe.style.color = "Highlight";
+        document.body.append(probe);
+        const highlight = getComputedStyle(probe).color;
+        probe.remove();
+        const style = getComputedStyle(element);
+        return {
+          shadow: style.boxShadow,
+          outline: style.outlineStyle,
+          width: parseFloat(style.outlineWidth),
+          color: style.outlineColor,
+          highlight,
+        };
+      });
+      if (
+        forcedFocus.shadow !== "none" ||
+        forcedFocus.outline !== "solid" ||
+        forcedFocus.width < 2 ||
+        forcedFocus.color !== forcedFocus.highlight
+      )
+        throw new Error(`Missing system-colored focus for ${control} in High Contrast`);
+    }
+    await page.emulateMedia({ forcedColors: "none" });
     await page.locator("#presentation-check").evaluate((element) => element.remove());
   }
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Landing layout and dialog bounds passed at desktop and mobile sizes. Light/dark surfaces, font weights, double focus rings, icon alignment, tabular figures, pretty wrapping, disclosure animation and keyboard access, and reduced motion passed without page errors.",
+    "Landing layout and dialog bounds passed at desktop and mobile sizes. Light/dark surfaces, font weights, double focus rings with at least 3:1 contrast, unclipped reference focus, Windows High Contrast focus, icon alignment, tabular figures, pretty wrapping, disclosure animation and keyboard access, and reduced motion passed without page errors.",
   );
 } finally {
   await browser.close();

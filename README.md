@@ -36,7 +36,10 @@ decorative, not proof of identity; Microsoft authentication is unchanged.
 The interface follows the system light/dark preference. Four neutral surface
 levels differ by 1% OKLCH lightness in light mode and 2% in dark mode; dark-mode
 font weights are reduced by 40 units. Inputs retain their border on focus and use
-a deeper double shadow ring instead of an outline. Shared icons sit 0.125em
+a deeper double shadow ring with an opaque, high-contrast inner ring instead of an
+outline. In Windows High Contrast, where shadows are suppressed, inputs use a
+system-colored outline. The reference disclosure keeps its focus ring inside the
+panel to avoid clipping. Shared icons sit 0.125em
 lower, numbers use tabular figures, and body copy uses pretty wrapping.
 Both native disclosures animate with a 0fr-to-1fr grid and respect reduced motion.
 There are no streaming-text, drag, like, or clipboard-copy controls to animate;
