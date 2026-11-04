@@ -45,6 +45,16 @@ Both native disclosures animate with a 0fr-to-1fr grid and respect reduced motio
 There are no streaming-text, drag, like, or clipboard-copy controls to animate;
 these rules do not add new product features.
 
+The authenticated workspace uses compact navigation and a ledger-style summary
+with aligned figures rather than colored icon cards. The monthly chart uses green
+for income and neutral bars for spending, with an exact minor-unit scale and a
+keyboard-focusable horizontal scroll area on narrow screens. Bar heights compare
+absolute amounts; the labelled disclosure retains signed, exact values and
+recorded/missing states. Asset totals appear beside the distribution, whose center
+shows the recorded asset count instead of repeating the total. The signed-out
+landing page is unchanged. This refinement follows
+[Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky (CC BY 4.0).
+
 Finance routes share one authenticated, in-memory session. Navigation reuses the
 loaded records instead of repeating Microsoft initialization and downloading the
 whole household again. Successful saves reload server records and versions.
