@@ -33,6 +33,15 @@ with the navigation collapse control at the bottom; there is no workspace top ba
 The collapsed state is kept in memory across finance routes. The avatar is
 decorative, not proof of identity; Microsoft authentication is unchanged.
 
+The interface follows the system light/dark preference. Four neutral surface
+levels differ by 1% OKLCH lightness in light mode and 2% in dark mode; dark-mode
+font weights are reduced by 40 units. Inputs retain their border on focus and use
+a deeper double shadow ring instead of an outline. Shared icons sit 0.125em
+lower, numbers use tabular figures, and body copy uses pretty wrapping.
+Both native disclosures animate with a 0fr-to-1fr grid and respect reduced motion.
+There are no streaming-text, drag, like, or clipboard-copy controls to animate;
+these rules do not add new product features.
+
 Finance routes share one authenticated, in-memory session. Navigation reuses the
 loaded records instead of repeating Microsoft initialization and downloading the
 whole household again. Successful saves reload server records and versions.
