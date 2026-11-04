@@ -147,6 +147,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("household interface", () => {
+  it("keeps both disclosures native with a single grid animation wrapper", async () => {
+    store.references.push({
+      id: "reference",
+      source: "synthetic",
+      kind: "TOTAL",
+      period: "2024-01",
+      ownerId: null,
+      valueMinor: "10000",
+      note: "Synthetic reference",
+    });
+    const view = render(<FinanceApp key="dashboard" page="dashboard" />);
+    const chart = (await screen.findByText("查看准确数值")).closest("details")!;
+    expect(chart.open).toBe(false);
+    expect(
+      chart.querySelector(":scope > .disclosure-content > .table-scroll > table"),
+    ).toBeTruthy();
+    view.rerender(<FinanceApp key="assets" page="assets" />);
+    const references = (
+      await screen.findByText("原始表格汇总参考（不重复计入资产）")
+    ).closest("details")!;
+    expect(references.open).toBe(false);
+    expect(
+      references.querySelector(":scope > .disclosure-content > .table-scroll > table"),
+    ).toBeTruthy();
+    expect(within(references).getByText("Synthetic reference")).toBeTruthy();
+  });
   it("keeps collapsed navigation across finance routes", async () => {
     const view = render(<FinanceApp key="dashboard" page="dashboard" />);
     fireEvent.click(await screen.findByRole("button", { name: "收起导航栏" }));

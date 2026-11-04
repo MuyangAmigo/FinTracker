@@ -114,6 +114,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
   };
   return (
     <svg
+      className="ui-icon"
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -1016,27 +1017,29 @@ function Trend({ store, year }: { store: Store; year: string }) {
       </div>
       <details className="chart-data">
         <summary>查看准确数值</summary>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>月份</th>
-                <th>收入</th>
-                <th>支出</th>
-                <th>状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((p) => (
-                <tr key={p.month}>
-                  <td>{p.month}</td>
-                  <td>{p.incomeRecorded ? money(p.income) : "未记录"}</td>
-                  <td>{p.expenseRecorded ? money(p.expense) : "未记录"}</td>
-                  <td>{!p.recorded ? "未记录" : p.complete ? "完整" : "未完成"}</td>
+        <div className="disclosure-content">
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>月份</th>
+                  <th>收入</th>
+                  <th>支出</th>
+                  <th>状态</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {points.map((p) => (
+                  <tr key={p.month}>
+                    <td>{p.month}</td>
+                    <td>{p.incomeRecorded ? money(p.income) : "未记录"}</td>
+                    <td>{p.expenseRecorded ? money(p.expense) : "未记录"}</td>
+                    <td>{!p.recorded ? "未记录" : p.complete ? "完整" : "未完成"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </details>
     </>
@@ -1431,35 +1434,37 @@ function Assets({
       {store.references.length > 0 && (
         <details className="panel references">
           <summary>原始表格汇总参考（不重复计入资产）</summary>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>期间</th>
-                  <th>参考类型</th>
-                  <th>归属</th>
-                  <th>原始值</th>
-                  <th>原始说明</th>
-                </tr>
-              </thead>
-              <tbody>
-                {store.references
-                  .filter(
-                    (r) =>
-                      r.period <= month &&
-                      (owner === "ALL" || (r.ownerId ?? "SHARED") === owner),
-                  )
-                  .map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.period}</td>
-                      <td>{r.kind}</td>
-                      <td>{ownerName(store, r.ownerId)}</td>
-                      <td>{r.valueMinor !== null ? money(r.valueMinor) : "—"}</td>
-                      <td>{r.note}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+          <div className="disclosure-content">
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>期间</th>
+                    <th>参考类型</th>
+                    <th>归属</th>
+                    <th>原始值</th>
+                    <th>原始说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {store.references
+                    .filter(
+                      (r) =>
+                        r.period <= month &&
+                        (owner === "ALL" || (r.ownerId ?? "SHARED") === owner),
+                    )
+                    .map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.period}</td>
+                        <td>{r.kind}</td>
+                        <td>{ownerName(store, r.ownerId)}</td>
+                        <td>{r.valueMinor !== null ? money(r.valueMinor) : "—"}</td>
+                        <td>{r.note}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </details>
       )}
