@@ -524,6 +524,66 @@ describe("household interface", () => {
     expect(screen.queryByLabelText("归属筛选")).toBeNull();
     expect(screen.queryByText(/CNY/)).toBeNull();
   });
+  it("uses labelled figures without decorative metric icons or a repeated asset total", async () => {
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    expect(screen.getByRole("heading", { level: 1, name: "财务总览" })).toBeTruthy();
+    const metrics = container.querySelectorAll(".metric");
+    expect(metrics).toHaveLength(4);
+    for (const metric of metrics) {
+      expect(
+        within(metric as HTMLElement).getByRole("heading", { level: 3 }),
+      ).toBeTruthy();
+      expect(metric.querySelector("svg")).toBeNull();
+    }
+    const assets = screen.getByRole("region", { name: "资产" });
+    expect(within(assets).getAllByText("¥100.00")).toHaveLength(2);
+    expect(assets.querySelector(".donut strong")!.textContent).toBe("1");
+    expect(within(assets).getByText(/未知余额不计为零/)).toBeTruthy();
+  });
+  it("keeps the chart scale exact for large minor-unit values and missing years", async () => {
+    store.entries[0].amountMinor = "9007199254740993";
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    const scale = container.querySelector(".chart-axis")!;
+    expect(scale.firstElementChild!.textContent).toBe("¥90,071,992,547,409.94");
+    expect(scale.children[1].textContent).toBe("¥45,035,996,273,704.97");
+    expect(scale.lastElementChild!.textContent).toBe("¥0.00");
+    expect(container.querySelector(".metric-value")!.textContent).toBe(
+      "¥90,071,992,547,409.93",
+    );
+    const chart = screen.getByRole("region", { name: "月度收支图表，可横向滚动" });
+    expect(chart.tabIndex).toBe(0);
+    expect(within(chart).getByRole("img", { name: "2024 年收支趋势" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "上一年" }));
+    expect(scale.firstElementChild!.textContent).toBe("");
+    expect(scale.lastElementChild!.textContent).toBe("—");
+    expect(container.querySelectorAll(".missing-bar")).toHaveLength(12);
+  });
+  it("keeps explicit zero, missing spending, and partial months distinct in the chart", async () => {
+    store.entries[0].amountMinor = "0";
+    store.periods[0].expenseComplete = false;
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    fireEvent.change(screen.getByLabelText("记录年份"), { target: { value: "2024" } });
+    expect(container.querySelectorAll(".income-bar")).toHaveLength(1);
+    expect(container.querySelectorAll(".expense-bar")).toHaveLength(0);
+    expect(container.querySelectorAll(".missing-bar")).toHaveLength(11);
+    expect(container.querySelector(".chart-axis")!.lastElementChild!.textContent).toBe(
+      "¥0.00",
+    );
+    expect(screen.getByText("1月*")).toBeTruthy();
+    fireEvent.click(screen.getByText("查看准确数值"));
+    const table = screen.getByRole("table", { name: "2024 年收支准确数值" });
+    const row = within(table).getAllByRole("row")[1];
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["2024-01", "¥0.00", "未记录", "未完成"]);
+  });
   it("lists twelve months in descending order and opens read-only details", async () => {
     render(<FinanceApp page="ledger" />);
     await screen.findByRole("table");

@@ -23,7 +23,7 @@ import {
 type Page = "dashboard" | "ledger" | "assets" | "accounts";
 type Mutation = (path: string, body: unknown, method?: string) => Promise<void>;
 const titles: Record<Page, [string, string]> = {
-  dashboard: ["把生活过好，把账记清。", "收支有数，生活有度。一起看见家庭财务的每一步。"],
+  dashboard: ["财务总览", "按年查看家庭收支与资产估值"],
   ledger: [
     "每月记一次，心里更有数。",
     "按年查看每月汇总，点击查看或编辑，在弹窗中处理月度记录。",
@@ -85,32 +85,6 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
       </>
     ),
     close: <path d="m6 6 12 12M6 18 18 6" />,
-    banknote: (
-      <>
-        <rect x="2" y="5" width="20" height="14" rx="2" />
-        <circle cx="12" cy="12" r="3" />
-        <path d="M6 12h.01M18 12h.01" />
-      </>
-    ),
-    receipt: (
-      <>
-        <path d="M5 3h14v18l-3-2-4 2-4-2-3 2V3Z" />
-        <path d="M9 7h6M9 11h6M9 15h3" />
-      </>
-    ),
-    savings: (
-      <>
-        <path d="M5 10a7 7 0 0 1 10-4l3-2v5l3 2v5h-3l-1 4h-3v-3H9v3H6l-1-5-3-2v-3h3Z" />
-        <path d="M9 7h4M16 11h.01" />
-      </>
-    ),
-    percent: (
-      <>
-        <path d="m5 19 14-14" />
-        <circle cx="7" cy="7" r="3" />
-        <circle cx="17" cy="17" r="3" />
-      </>
-    ),
   };
   return (
     <svg
@@ -740,23 +714,16 @@ function Metric({
   label,
   value,
   note,
-  icon,
-  tone,
+  emphasis = false,
 }: {
   label: string;
   value: string;
   note: string;
-  icon: string;
-  tone: string;
+  emphasis?: boolean;
 }) {
   return (
-    <section className={`metric ${tone}`}>
-      <div className="metric-top">
-        <span>{label}</span>
-        <span className="metric-icon">
-          <Icon name={icon} />
-        </span>
-      </div>
+    <section className={`metric${emphasis ? " metric-emphasis" : ""}`}>
+      <h3 className="metric-top">{label}</h3>
       <div className="metric-value">{value}</div>
       <div className="metric-note">{note}</div>
     </section>
@@ -789,15 +756,11 @@ function AnnualMetrics({ store, year }: { store: Store; year: string }) {
         label="总收入"
         value={annual.incomeRecorded ? money(annual.income) : "—"}
         note="本年已登记收入"
-        icon="banknote"
-        tone="green"
       />
       <Metric
         label="总支出"
         value={annual.expenseRecorded ? money(annual.expense) : "—"}
         note="本年已登记支出"
-        icon="receipt"
-        tone="orange"
       />
       <Metric
         label="总结余"
@@ -809,15 +772,12 @@ function AnnualMetrics({ store, year }: { store: Store; year: string }) {
             ? "未完成月份仅计已记录差额"
             : "已登记收入 − 已登记支出"
         }
-        icon="savings"
-        tone="blue"
+        emphasis
       />
       <Metric
         label="储蓄率"
         value={annual.rate ?? "暂不适用"}
         note="记录完整且总收入为正时计算"
-        icon="percent"
-        tone="purple"
       />
     </div>
   );
@@ -846,12 +806,12 @@ function Dashboard({
         <section className="panel">
           <PanelTitle
             title="每月收支趋势"
-            subtitle="按月份展示收入与支出；未完成月份以 * 标注"
+            subtitle="按月份比较收支金额大小；负数及准确金额见下表，未完成月份以 * 标注"
             right={
               <div className="legend">
-                <i className="green" />
+                <i className="income-key" />
                 收入
-                <i className="orange" />
+                <i className="expense-key" />
                 支出
               </div>
             }
@@ -864,23 +824,25 @@ function Dashboard({
           <h2 id="asset-section">资产</h2>
           <p>截至 {asOf} · 独立于月度收支</p>
         </div>
-        <div className="asset-summary">
-          <div>
-            <small>总资产</small>
-            <strong>{balances.length ? money(total) : "—"}</strong>
-            <span>
-              {balances.length} 个已登记资产；未更新账户沿用历史估值，未知余额不计为零。
-            </span>
+        <div className="asset-overview">
+          <div className="asset-summary">
+            <div>
+              <small>总资产</small>
+              <strong>{balances.length ? money(total) : "—"}</strong>
+              <span>
+                {balances.length} 个已登记资产；未更新账户沿用历史估值，未知余额不计为零。
+              </span>
+            </div>
           </div>
+          <section className="panel asset-distribution">
+            <PanelTitle title="资产分布" subtitle="金融资产、房产及车辆" />
+            {balances.length ? (
+              <Composition store={store} asOf={asOf} owner="ALL" />
+            ) : (
+              <Empty title="尚未登记资产余额" text="登记实际余额后显示资产分布。" />
+            )}
+          </section>
         </div>
-        <section className="panel asset-distribution">
-          <PanelTitle title="资产分布" subtitle="金融资产、房产及车辆" />
-          {balances.length ? (
-            <Composition store={store} asOf={asOf} owner="ALL" />
-          ) : (
-            <Empty title="尚未登记资产余额" text="登记实际余额后显示资产分布。" />
-          )}
-        </section>
       </section>
     </div>
   );
@@ -975,56 +937,79 @@ function MonthlyTable({
 }
 function Trend({ store, year }: { store: Store; year: string }) {
   const points = annualSummary(store, year).months;
-  const max = Math.max(
-    1,
-    ...points.flatMap((p) => [Number(p.income), Number(p.expense)]).map(Math.abs),
+  const maximum = points.reduce(
+    (largest, point) =>
+      [point.income, point.expense].reduce((max, amount) => {
+        const absolute = amount < 0n ? -amount : amount;
+        return absolute > max ? absolute : max;
+      }, largest),
+    0n,
   );
+  // Keep both axis ticks on whole minor units.
+  const scaleMinor = maximum + (maximum % 2n);
+  const scale = Number(scaleMinor || 1n);
+  const recorded = points.some((point) => point.recorded);
   return (
     <>
-      <div className="chart" aria-label={`${year} 年收支趋势`}>
-        {points.map((p, i) => (
-          <div
-            key={p.month}
-            className="chart-column"
-            title={`${p.month} 收入 ${p.incomeRecorded ? money(p.income) : "未记录"}，支出 ${p.expenseRecorded ? money(p.expense) : "未记录"}${p.recorded && !p.complete ? "（未完成）" : ""}`}
-          >
-            <div className="chart-bars">
-              {p.incomeRecorded && (
-                <span
-                  className="income-bar"
-                  style={{
-                    height: `${Math.max(2, (Math.abs(Number(p.income)) / max) * 100)}%`,
-                  }}
-                />
-              )}
-              {p.expenseRecorded && (
-                <span
-                  className="expense-bar"
-                  style={{
-                    height: `${Math.max(2, (Math.abs(Number(p.expense)) / max) * 100)}%`,
-                  }}
-                />
-              )}
-              {!p.incomeRecorded && !p.expenseRecorded && (
-                <span className="missing-bar" />
-              )}
-            </div>
-            <span>
-              {i + 1}月{p.recorded && !p.complete ? "*" : ""}
-            </span>
+      <div
+        className="chart-scroll"
+        role="region"
+        aria-label="月度收支图表，可横向滚动"
+        tabIndex={0}
+      >
+        <div className="trend-chart">
+          <div className="chart-axis" aria-hidden="true">
+            <span>{scaleMinor > 0n ? money(scaleMinor) : ""}</span>
+            <span>{scaleMinor > 0n ? money(scaleMinor / 2n) : ""}</span>
+            <span>{recorded ? money(0n) : "—"}</span>
           </div>
-        ))}
+          <div className="chart" role="img" aria-label={`${year} 年收支趋势`}>
+            {points.map((p, i) => (
+              <div
+                key={p.month}
+                className="chart-column"
+                title={`${p.month} 收入 ${p.incomeRecorded ? money(p.income) : "未记录"}，支出 ${p.expenseRecorded ? money(p.expense) : "未记录"}${p.recorded && !p.complete ? "（未完成）" : ""}`}
+              >
+                <div className="chart-bars">
+                  {p.incomeRecorded && (
+                    <span
+                      className="income-bar"
+                      style={{
+                        height: `${Math.max(2, (Math.abs(Number(p.income)) / scale) * 100)}%`,
+                      }}
+                    />
+                  )}
+                  {p.expenseRecorded && (
+                    <span
+                      className="expense-bar"
+                      style={{
+                        height: `${Math.max(2, (Math.abs(Number(p.expense)) / scale) * 100)}%`,
+                      }}
+                    />
+                  )}
+                  {!p.incomeRecorded && !p.expenseRecorded && (
+                    <span className="missing-bar" />
+                  )}
+                </div>
+                <span>
+                  {i + 1}月{p.recorded && !p.complete ? "*" : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
+      <p className="chart-scroll-hint">左右滑动查看全年，或展开下表</p>
       <details className="chart-data">
         <summary>查看准确数值</summary>
         <div className="disclosure-content">
           <div className="table-scroll">
-            <table>
+            <table aria-label={`${year} 年收支准确数值`}>
               <thead>
                 <tr>
                   <th>月份</th>
-                  <th>收入</th>
-                  <th>支出</th>
+                  <th className="numeric">收入</th>
+                  <th className="numeric">支出</th>
                   <th>状态</th>
                 </tr>
               </thead>
@@ -1032,8 +1017,12 @@ function Trend({ store, year }: { store: Store; year: string }) {
                 {points.map((p) => (
                   <tr key={p.month}>
                     <td>{p.month}</td>
-                    <td>{p.incomeRecorded ? money(p.income) : "未记录"}</td>
-                    <td>{p.expenseRecorded ? money(p.expense) : "未记录"}</td>
+                    <td className="numeric">
+                      {p.incomeRecorded ? money(p.income) : "未记录"}
+                    </td>
+                    <td className="numeric">
+                      {p.expenseRecorded ? money(p.expense) : "未记录"}
+                    </td>
                     <td>{!p.recorded ? "未记录" : p.complete ? "完整" : "未完成"}</td>
                   </tr>
                 ))}
@@ -1061,7 +1050,7 @@ function Composition({
     values.set(type, (values.get(type) ?? 0n) + BigInt(b.amountMinor));
   }
   const sum = [...values.values()].reduce((a, b) => a + b, 0n),
-    colors = ["#237d65", "#76b7a5", "#dfa161", "#7f90c2", "#d3b1d4", "#a4b592"];
+    colors = ["#26745b", "#6e8f80", "#849b8f", "#a3b2a9", "#bcc8c0", "#51695e"];
   const segments = [...values]
     .filter(([, v]) => v > 0n)
     .map(([type, value], i) => ({ type, value, color: colors[i % colors.length] }));
@@ -1077,14 +1066,14 @@ function Composition({
     <div className="composition">
       <div
         className="donut"
-        style={{ background: sum > 0n ? `conic-gradient(${stops})` : "#edf2ee" }}
+        style={{ background: sum > 0n ? `conic-gradient(${stops})` : "var(--border)" }}
         role="img"
         aria-label="资产类型分布"
       >
         <div>
-          <small>资产总额</small>
-          <strong>{money(sum)}</strong>
-          <span>{balances.length} 个资产</span>
+          <small>已登记资产</small>
+          <strong>{balances.length}</strong>
+          <span>个资产</span>
         </div>
       </div>
       <div className="composition-list">
