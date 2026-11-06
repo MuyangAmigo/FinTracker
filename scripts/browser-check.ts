@@ -1,17 +1,109 @@
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { createServer } from "node:http";
+import { extname, isAbsolute, relative, resolve, join } from "node:path";
 import { privatePath } from "./normalize.js";
-const root = process.env.PREVIEW_URL ?? "http://localhost:3133/FinTracker";
+let root = process.env.PREVIEW_URL ?? "";
 const output = process.env.BROWSER_ARTIFACT_DIR;
 if (!output) throw new Error("Set BROWSER_ARTIFACT_DIR outside the repository");
 const directory = privatePath(output);
 mkdirSync(directory, { recursive: true });
+const fixtures = [
+  "dashboard",
+  "dashboard-empty",
+  "dashboard-collapsed",
+  "ledger-board",
+  "ledger-table",
+  "ledger-dialog",
+  "assets",
+  "assets-empty",
+  "accounts",
+  "accounts-empty",
+] as const;
+for (const fixture of fixtures) {
+  if (!existsSync(join(directory, `workspace-${fixture}.html`)))
+    throw new Error(
+      "Missing synthetic workspace fixtures. With BROWSER_ARTIFACT_DIR set, run pnpm exec vitest run components\\finance-app.test.tsx before pnpm test:browser.",
+    );
+}
 const browser = await chromium.launch({
   executablePath: process.env.BROWSER_EXECUTABLE,
   headless: true,
 });
+const previewErrors: string[] = [];
+const buildRoot = resolve("out");
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "/FinTracker";
+const preview = root
+  ? null
+  : createServer((request, response) => {
+      let pathname: string;
+      try {
+        pathname = decodeURIComponent(
+          new URL(request.url ?? "/", "http://127.0.0.1").pathname,
+        );
+      } catch (error) {
+        if (!(error instanceof URIError || error instanceof TypeError)) throw error;
+        response.writeHead(400).end("Invalid path");
+        return;
+      }
+      if (basePath && pathname !== basePath && !pathname.startsWith(`${basePath}/`)) {
+        response.writeHead(404).end("Not found");
+        return;
+      }
+      const file = resolve(
+        buildRoot,
+        ...pathname.slice(basePath.length).split("/").filter(Boolean),
+      );
+      const scope = relative(buildRoot, file);
+      if (scope.startsWith("..") || isAbsolute(scope)) {
+        response.writeHead(403).end("Outside preview");
+        return;
+      }
+      try {
+        const target = statSync(file).isDirectory() ? join(file, "index.html") : file;
+        const types: Record<string, string> = {
+          ".html": "text/html; charset=utf-8",
+          ".js": "text/javascript; charset=utf-8",
+          ".css": "text/css; charset=utf-8",
+          ".png": "image/png",
+          ".svg": "image/svg+xml",
+          ".ico": "image/x-icon",
+          ".woff2": "font/woff2",
+          ".txt": "text/plain; charset=utf-8",
+          ".json": "application/json",
+        };
+        const body = readFileSync(target);
+        response
+          .writeHead(200, {
+            "Content-Type": types[extname(target)] ?? "application/octet-stream",
+            "Cache-Control": "no-store",
+          })
+          .end(body);
+      } catch (error) {
+        const missing =
+          error instanceof Error &&
+          "code" in error &&
+          (error.code === "ENOENT" || error.code === "ENOTDIR");
+        if (!missing)
+          previewErrors.push(error instanceof Error ? error.message : String(error));
+        response
+          .writeHead(missing ? 404 : 500)
+          .end(missing ? "Not found" : "Preview failed");
+      }
+    });
 try {
+  if (preview) {
+    if (!existsSync(join(buildRoot, "index.html")))
+      throw new Error("Run pnpm build before the browser check");
+    await new Promise<void>((resolve, reject) => {
+      preview.once("error", reject);
+      preview.listen(0, "127.0.0.1", resolve);
+    });
+    const address = preview.address();
+    if (!address || typeof address === "string")
+      throw new Error("Preview did not bind to loopback");
+    root = `http://127.0.0.1:${address.port}${basePath}`;
+  }
   const page = await browser.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -381,10 +473,327 @@ try {
     await page.emulateMedia({ forcedColors: "none" });
     await page.locator("#presentation-check").evaluate((element) => element.remove());
   }
-  if (errors.length) throw new Error(errors.join("\n"));
+  const stylesheets = await page
+    .locator('link[rel="stylesheet"]')
+    .evaluateAll((links) => links.map((link) => (link as HTMLLinkElement).href));
+  if (!stylesheets.length) throw new Error("The preview has no production stylesheet");
+  const workspace = await browser.newPage();
+  workspace.on("pageerror", (error) => errors.push(error.message));
+  const issues: string[] = [];
+  const renderWorkspace = async (fixture: (typeof fixtures)[number]) => {
+    const base = `${root}/`.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+    await workspace.setContent(
+      readFileSync(join(directory, `workspace-${fixture}.html`), "utf8").replace(
+        "<head>",
+        `<head><base href="${base}">`,
+      ),
+    );
+    await workspace.evaluate(() => {
+      for (const image of document.querySelectorAll<HTMLImageElement>(".profile-avatar"))
+        image.loading = "eager";
+      for (const dialog of document.querySelectorAll<HTMLDialogElement>("dialog[open]")) {
+        dialog.removeAttribute("open");
+        dialog.showModal();
+      }
+    });
+    for (const url of stylesheets) await workspace.addStyleTag({ url });
+    await workspace.waitForFunction(
+      () =>
+        [...document.querySelectorAll<HTMLImageElement>(".profile-avatar")].every(
+          (image) => image.complete && image.naturalWidth > 0,
+        ),
+      undefined,
+      { timeout: 5000 },
+    );
+    await workspace.evaluate(() => window.scrollTo(0, 0));
+  };
+  for (const colorScheme of ["light", "dark"] as const) {
+    await workspace.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    for (const viewport of [
+      { width: 1440, height: 1000 },
+      { width: 1280, height: 800 },
+      { width: 1024, height: 1000 },
+      { width: 390, height: 1000 },
+      { width: 320, height: 1000 },
+    ]) {
+      await workspace.setViewportSize(viewport);
+      for (const fixture of fixtures) {
+        await renderWorkspace(fixture);
+        const label = `${fixture}, ${colorScheme}, ${viewport.width}px`;
+        const found = await workspace.evaluate(
+          ({ name, width }) => {
+            const result: string[] = [];
+            const shell = document.querySelector<HTMLElement>(".finance-shell")!;
+            if (document.documentElement.scrollWidth > width + 1)
+              result.push("Workspace overflows the viewport");
+            if (name.startsWith("dashboard") && width >= 1280) {
+              const hero = document
+                .querySelector<HTMLElement>(".hero-chart")!
+                .getBoundingClientRect();
+              const main = document.querySelector<HTMLElement>(".finance-main")!;
+              const style = getComputedStyle(main);
+              const contentWidth =
+                main.clientWidth -
+                parseFloat(style.paddingLeft) -
+                parseFloat(style.paddingRight);
+              const contentTop =
+                main.getBoundingClientRect().top + parseFloat(style.paddingTop);
+              const visibleHeight = Math.max(
+                0,
+                Math.min(hero.bottom, innerHeight) - Math.max(hero.top, contentTop),
+              );
+              const share =
+                (hero.width * visibleHeight) /
+                (contentWidth * (innerHeight - contentTop));
+              if (share <= 0.5)
+                result.push(
+                  `Hero covers only ${(share * 100).toFixed(1)}% of first-screen content`,
+                );
+              if (
+                [...document.querySelectorAll(".hero-chart .chart-column > span")].some(
+                  (label) => label.getBoundingClientRect().bottom > innerHeight,
+                )
+              )
+                result.push("Chart month labels fall below the first screen");
+            }
+            if (name.startsWith("assets")) {
+              const bands = [...document.querySelectorAll(".asset-bands > .asset-band")];
+              if (bands.length !== 3) result.push("Expected three asset bands");
+              for (let index = 1; index < bands.length; index++) {
+                const gap =
+                  bands[index].getBoundingClientRect().top -
+                  bands[index - 1].getBoundingClientRect().bottom;
+                if (Math.abs(gap - 48) > 1) result.push(`Asset band gap is ${gap}px`);
+              }
+              for (const cell of document.querySelectorAll(
+                "th:not(:first-child), td:not(:first-child)",
+              )) {
+                if (getComputedStyle(cell).whiteSpace !== "nowrap")
+                  result.push(
+                    "Asset table cells must stay readable and scroll instead of wrapping vertically",
+                  );
+              }
+            }
+            if (name === "ledger-board") {
+              if (document.querySelectorAll(".month-card").length !== 12)
+                result.push("Monthly board must contain twelve cards");
+              const counts = [
+                ...document.querySelectorAll(".month-column-heading .section-count"),
+              ].reduce((sum, element) => sum + Number(element.textContent), 0);
+              if (counts !== 12) result.push("Monthly column counts do not total twelve");
+            }
+            if (name.startsWith("accounts")) {
+              const position = getComputedStyle(
+                document.querySelector(".account-actions")!,
+              ).position;
+              if (position !== (width > 1150 ? "sticky" : "static"))
+                result.push(`Wrong action-rail position: ${position}`);
+            }
+            const dialog = document.querySelector<HTMLDialogElement>("dialog[open]");
+            if (dialog) {
+              const box = dialog.getBoundingClientRect();
+              if (
+                box.left < 0 ||
+                box.right > width ||
+                box.top < 0 ||
+                box.bottom > innerHeight
+              )
+                result.push("Monthly dialog exceeds the viewport");
+            }
+            for (const button of shell.querySelectorAll<HTMLButtonElement>("button")) {
+              if (!button.getClientRects().length || button.disabled) continue;
+              if (button.getBoundingClientRect().height < 43)
+                result.push(
+                  `Small action target: ${button.getAttribute("aria-label") ?? button.textContent?.trim()}`,
+                );
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 1;
+            const context = canvas.getContext("2d")!;
+            const backgrounds = new Map<Element, number[]>();
+            const colors = {
+              pixels(color: string) {
+                context.clearRect(0, 0, 1, 1);
+                context.fillStyle = color;
+                context.fillRect(0, 0, 1, 1);
+                return [...context.getImageData(0, 0, 1, 1).data];
+              },
+              background(element: Element | null): number[] {
+                if (!element) return [255, 255, 255];
+                const cached = backgrounds.get(element);
+                if (cached) return cached;
+                const own = colors.pixels(getComputedStyle(element).backgroundColor);
+                const below = colors.background(element.parentElement);
+                const alpha = own[3] / 255;
+                const value = below.map(
+                  (channel, index) => own[index] * alpha + channel * (1 - alpha),
+                );
+                backgrounds.set(element, value);
+                return value;
+              },
+              luminance(color: number[]) {
+                const linear = color.slice(0, 3).map((channel) => {
+                  const value = channel / 255;
+                  return value <= 0.04045
+                    ? value / 12.92
+                    : ((value + 0.055) / 1.055) ** 2.4;
+                });
+                return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+              },
+              contrast(foreground: number[], backdrop: number[]) {
+                const a = colors.luminance(foreground),
+                  b = colors.luminance(backdrop);
+                return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+              },
+            };
+            const checked = new Set<string>();
+            const walker = document.createTreeWalker(shell, NodeFilter.SHOW_TEXT);
+            let node = walker.nextNode();
+            while (node) {
+              const element = node.parentElement;
+              const text = node.textContent?.trim();
+              if (
+                element &&
+                text &&
+                element.getClientRects().length &&
+                !element.closest("button:disabled, input:disabled")
+              ) {
+                const details = element.closest("details");
+                const hiddenDisclosure =
+                  details && !details.open && !element.closest("summary");
+                const style = getComputedStyle(element);
+                if (
+                  !hiddenDisclosure &&
+                  style.visibility !== "hidden" &&
+                  style.display !== "none"
+                ) {
+                  const key = `${style.color}:${colors.background(element).join(",")}:${style.fontSize}:${style.fontWeight}`;
+                  if (!checked.has(key)) {
+                    checked.add(key);
+                    const large =
+                      parseFloat(style.fontSize) >= 24 ||
+                      (parseFloat(style.fontSize) >= 18.66 &&
+                        Number(style.fontWeight) >= 700);
+                    const ratio = colors.contrast(
+                      colors.pixels(style.color),
+                      colors.background(element),
+                    );
+                    if (ratio + 0.01 < (large ? 3 : 4.5))
+                      result.push(
+                        `Low text contrast ${ratio.toFixed(2)}: ${text.slice(0, 40)}`,
+                      );
+                  }
+                }
+              }
+              node = walker.nextNode();
+            }
+            const tokens = getComputedStyle(shell);
+            const focus = colors.pixels(tokens.getPropertyValue("--focus-inner").trim());
+            for (let level = 0; level < 4; level++) {
+              if (
+                colors.contrast(
+                  focus,
+                  colors.pixels(tokens.getPropertyValue(`--surface-${level}`).trim()),
+                ) < 3
+              )
+                result.push(`Focus contrast is below 3:1 on surface ${level}`);
+            }
+            return result;
+          },
+          { name: fixture, width: viewport.width },
+        );
+        issues.push(...found.map((issue) => `${label}: ${issue}`));
+        if (fixture === "accounts" && viewport.width >= 1280) {
+          await workspace.evaluate(() => window.scrollTo(0, 240));
+          const before = await workspace.locator(".account-actions").boundingBox();
+          const mainBefore = await workspace.locator(".accounts-main").boundingBox();
+          await workspace.evaluate(() => window.scrollTo(0, 440));
+          const after = await workspace.locator(".account-actions").boundingBox();
+          const mainAfter = await workspace.locator(".accounts-main").boundingBox();
+          if (
+            !before ||
+            !after ||
+            !mainBefore ||
+            !mainAfter ||
+            Math.abs(before.y - after.y) > 1 ||
+            mainBefore.y - mainAfter.y < 190
+          )
+            issues.push(
+              `${label}: Action rail does not stay in place while the main area scrolls`,
+            );
+          await workspace.evaluate(() => window.scrollTo(0, 0));
+        }
+        if (
+          (viewport.width === 1440 || viewport.width === 390) &&
+          ["dashboard", "ledger-board", "assets", "accounts"].includes(fixture)
+        ) {
+          await workspace.screenshot({
+            path: join(
+              directory,
+              `workspace-${fixture}-${colorScheme}-${viewport.width}.png`,
+            ),
+            animations: "disabled",
+          });
+        }
+        if (fixture === "ledger-board" && viewport.width === 390) {
+          const board = workspace.getByRole("region", {
+            name: "2024 年月度状态看板，可横向滚动",
+          });
+          await board.focus();
+          await workspace.keyboard.press("ArrowRight");
+          await workspace.waitForFunction(
+            () => document.querySelector(".board-scroll")!.scrollLeft > 0,
+          );
+        }
+      }
+    }
+    await renderWorkspace("ledger-dialog");
+    const field = workspace.getByLabel("Salary 金额");
+    const border = await field.evaluate(
+      (element) => getComputedStyle(element).borderColor,
+    );
+    await field.focus();
+    const focused = await field.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        border: style.borderColor,
+        outline: style.outlineStyle,
+        shadow: style.boxShadow,
+      };
+    });
+    if (
+      focused.border !== border ||
+      focused.outline !== "none" ||
+      !focused.shadow.includes("0px 0px 0px 2px")
+    )
+      issues.push(
+        `${colorScheme}: Authenticated inputs do not retain their border and double focus ring`,
+      );
+    await workspace.emulateMedia({ forcedColors: "active" });
+    await field.focus();
+    const highContrast = await field.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return (
+        style.outlineStyle === "solid" &&
+        parseFloat(style.outlineWidth) >= 2 &&
+        style.boxShadow === "none"
+      );
+    });
+    if (!highContrast)
+      issues.push(`${colorScheme}: Missing authenticated High Contrast focus`);
+    await workspace.emulateMedia({ forcedColors: "none" });
+  }
+  await workspace.close();
+  if (issues.length || errors.length || previewErrors.length)
+    throw new Error([...issues, ...errors, ...previewErrors].join("\n"));
   console.log(
-    "Landing layout and dialog bounds passed at desktop and mobile sizes. Light/dark surfaces, font weights, double focus rings with at least 3:1 contrast, unclipped reference focus, Windows High Contrast focus, icon alignment, tabular figures, pretty wrapping, disclosure animation and keyboard access, and reduced motion passed without page errors.",
+    "Guest and synthetic signed-in layouts passed at desktop, tablet, and mobile sizes. Hero dominance, 48px bands, sticky rails, monthly counts, contrast, action targets, dialog bounds, keyboard scrolling, light/dark themes, native disclosures, High Contrast focus, and reduced motion passed without page errors.",
   );
 } finally {
   await browser.close();
+  if (preview?.listening)
+    await new Promise<void>((resolve, reject) => {
+      preview.close((error) => (error ? reject(error) : resolve()));
+    });
 }
