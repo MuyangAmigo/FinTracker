@@ -24,15 +24,9 @@ type Page = "dashboard" | "ledger" | "assets" | "accounts";
 type Mutation = (path: string, body: unknown, method?: string) => Promise<void>;
 const titles: Record<Page, [string, string]> = {
   dashboard: ["财务总览", "按年查看家庭收支与资产估值"],
-  ledger: [
-    "每月记一次，心里更有数。",
-    "按年查看每月汇总，点击查看或编辑，在弹窗中处理月度记录。",
-  ],
-  assets: [
-    "每一份积累，都值得看见。",
-    "按实际余额登记资产。历史估值会保留，收支不会自动改变余额。",
-  ],
-  accounts: ["让每个账户，各归其位。", "管理个人与共同账户，以及月度收入来源。"],
+  ledger: ["月度记账", "按记录状态整理每个月，收入与支出的完整性分别保留。"],
+  assets: ["资产管理", "按实际余额登记资产。历史估值会保留，收支不会自动改变余额。"],
+  accounts: ["账户设置", "管理个人与共同账户，以及月度收入来源。"],
 };
 const nav: { id: Page; href: string; label: string; icon: string }[] = [
   { id: "dashboard", href: "/", label: "财务总览", icon: "grid" },
@@ -422,7 +416,7 @@ export function FinanceApp({ page }: { page: Page }) {
   };
   return (
     <div
-      className={`app-shell${signedIn ? (collapsed ? " sidebar-collapsed" : "") : " guest-shell"}`}
+      className={`app-shell${signedIn ? " finance-shell" : " guest-shell"}${signedIn && collapsed ? " sidebar-collapsed" : ""}`}
     >
       {signedIn && (
         <aside className="sidebar">
@@ -496,23 +490,13 @@ export function FinanceApp({ page }: { page: Page }) {
             </div>
           </header>
         )}
-        <main className={signedIn ? undefined : "landing-main"}>
+        <main className={signedIn ? "finance-main" : "landing-main"}>
           {signedIn && (
             <div className="page-heading">
               <div>
                 <h1>{titles[page][0]}</h1>
                 <p>{titles[page][1]}</p>
               </div>
-              {(page === "assets" || page === "accounts") && (
-                <button
-                  className="primary-button"
-                  disabled={!store || busy}
-                  onClick={() => (page === "assets" ? open("balance") : open("account"))}
-                >
-                  <Icon name="plus" size={18} />
-                  {page === "assets" ? "登记资产" : "新增账户"}
-                </button>
-              )}
             </div>
           )}
           {error && (
@@ -545,32 +529,6 @@ export function FinanceApp({ page }: { page: Page }) {
             <Landing />
           ) : (
             <>
-              {page !== "accounts" && page !== "dashboard" && (
-                <div className="filter-bar">
-                  <span className="selected">
-                    {page === "assets" ? "资产估值" : "年度视图"}
-                  </span>
-                  <div className="filters">
-                    {page === "assets" ? (
-                      <label>
-                        <span className="sr-only">记录月份</span>
-                        <input
-                          type="month"
-                          value={month}
-                          onChange={(e) => {
-                            if (e.target.value && guardNavigation()) {
-                              setMonth(e.target.value);
-                              setDirty(false);
-                            }
-                          }}
-                        />
-                      </label>
-                    ) : (
-                      yearControl
-                    )}
-                  </div>
-                </div>
-              )}
               {page === "dashboard" &&
                 (store ? (
                   <Dashboard
@@ -587,14 +545,17 @@ export function FinanceApp({ page }: { page: Page }) {
               {page === "ledger" &&
                 (store ? (
                   <>
-                    <section aria-label={`${year} 年收支汇总`}>
+                    <section className="ledger-summary" aria-label={`${year} 年收支汇总`}>
                       <div className="section-heading">
-                        <h2>本年汇总</h2>
-                        <p>{year} 年 · 已登记数据</p>
+                        <div>
+                          <h2>本年汇总</h2>
+                          <p>已登记数据，未记录不代表零</p>
+                        </div>
+                        {yearControl}
                       </div>
                       <AnnualMetrics store={store} year={year} />
                     </section>
-                    <MonthlyTable
+                    <MonthlyRecords
                       store={store}
                       year={year}
                       onOpen={selectMonth}
@@ -616,6 +577,13 @@ export function FinanceApp({ page }: { page: Page }) {
                     month={month}
                     owner="ALL"
                     onRecord={() => open("balance")}
+                    busy={busy}
+                    onMonthChange={(value) => {
+                      if (value && guardNavigation()) {
+                        setMonth(value);
+                        setDirty(false);
+                      }
+                    }}
                   />
                 ) : (
                   <section className="panel">
@@ -632,6 +600,7 @@ export function FinanceApp({ page }: { page: Page }) {
                     onEdit={(a) => open("account", a)}
                     onAdd={() => open("account")}
                     onIncome={() => open("income")}
+                    busy={busy}
                   />
                 ) : (
                   <section className="panel">
@@ -795,6 +764,7 @@ function Dashboard({
 }) {
   const balances = latestBalances(store, asOf);
   const total = balances.reduce((sum, balance) => sum + BigInt(balance.amountMinor), 0n);
+  const annual = annualSummary(store, year);
   return (
     <div className="annual-dashboard">
       <section className="annual-section" aria-labelledby="income-section">
@@ -802,22 +772,30 @@ function Dashboard({
           <h2 id="income-section">收支</h2>
           {yearControl}
         </div>
-        <AnnualMetrics store={store} year={year} />
-        <section className="panel">
-          <PanelTitle
-            title="每月收支趋势"
-            subtitle="按月份比较收支金额大小；负数及准确金额见下表，未完成月份以 * 标注"
-            right={
-              <div className="legend">
-                <i className="income-key" />
-                收入
-                <i className="expense-key" />
-                支出
-              </div>
-            }
-          />
-          <Trend store={store} year={year} />
-        </section>
+        <div className="overview-hero">
+          <section className="panel hero-chart">
+            <PanelTitle
+              title="每月收支趋势"
+              subtitle="比较每月收支金额；负数及准确金额见下表，未完成月份以 * 标注"
+              right={
+                <div className="legend">
+                  <i className="income-key" />
+                  收入
+                  <i className="expense-key" />
+                  支出
+                </div>
+              }
+            />
+            <Trend store={store} year={year} />
+          </section>
+          <aside className="annual-figures" aria-label={`${year} 年收支汇总`}>
+            <h2>本年汇总</h2>
+            <p className="summary-context">
+              {annual.recordedMonths} 个月已登记 · {annual.completeMonths} 个月完整
+            </p>
+            <AnnualMetrics store={store} year={year} />
+          </aside>
+        </div>
       </section>
       <section className="annual-section" aria-labelledby="asset-section">
         <div className="section-heading">
@@ -847,17 +825,185 @@ function Dashboard({
     </div>
   );
 }
-function MonthlyTable({
-  store,
-  year,
-  onOpen,
-  busy,
-}: {
+type MonthlyProps = {
   store: Store;
   year: string;
   onOpen: (month: string, mode: "view" | "edit") => void;
   busy: boolean;
+};
+function CompletionStatus({
+  complete,
+  recorded,
+}: {
+  complete: boolean;
+  recorded: boolean;
 }) {
+  return (
+    <span
+      className={`record-state ${complete ? "is-complete" : recorded ? "is-partial" : "is-missing"}`}
+    >
+      {complete ? "完整" : recorded ? "未完成" : "未记录"}
+    </span>
+  );
+}
+function MonthActions({
+  month,
+  onOpen,
+  busy,
+}: Pick<MonthlyProps, "onOpen" | "busy"> & { month: string }) {
+  return (
+    <div className="row-actions">
+      <button
+        type="button"
+        className="text-button"
+        aria-label={`查看 ${month}`}
+        disabled={busy}
+        onClick={() => onOpen(month, "view")}
+      >
+        查看
+      </button>
+      <button
+        type="button"
+        className="text-button"
+        aria-label={`编辑 ${month}`}
+        disabled={busy}
+        onClick={() => onOpen(month, "edit")}
+      >
+        编辑
+      </button>
+    </div>
+  );
+}
+function MonthlyRecords(props: MonthlyProps) {
+  const [view, setView] = useState<"board" | "table">("board");
+  return (
+    <section className="monthly-workspace" aria-labelledby="monthly-title">
+      <div className="section-heading">
+        <div>
+          <h2 id="monthly-title">月度记录</h2>
+          <p>按状态整理，或切换表格逐月比较</p>
+        </div>
+        <div className="view-switch" role="group" aria-label="月度记录视图">
+          <button
+            type="button"
+            aria-pressed={view === "board"}
+            disabled={props.busy}
+            onClick={() => setView("board")}
+          >
+            状态看板
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "table"}
+            disabled={props.busy}
+            onClick={() => setView("table")}
+          >
+            对比表格
+          </button>
+        </div>
+      </div>
+      {view === "board" ? <MonthlyBoard {...props} /> : <MonthlyTable {...props} />}
+    </section>
+  );
+}
+function MonthlyBoard({ store, year, onOpen, busy }: MonthlyProps) {
+  const rows = annualSummary(store, year).months.toReversed();
+  const periods = new Map(store.periods.map((period) => [period.month, period]));
+  const groups = [
+    { id: "missing", title: "未记录", rows: rows.filter((row) => !row.recorded) },
+    {
+      id: "partial",
+      title: "待补全",
+      rows: rows.filter((row) => row.recorded && !row.complete),
+    },
+    { id: "complete", title: "已完成", rows: rows.filter((row) => row.complete) },
+  ];
+  return (
+    <>
+      <div
+        className="board-scroll"
+        role="region"
+        aria-label={`${year} 年月度状态看板，可横向滚动`}
+        tabIndex={0}
+      >
+        <div className="monthly-board">
+          {groups.map((group) => (
+            <section
+              className={`month-column month-column-${group.id}`}
+              key={group.id}
+              aria-labelledby={`months-${group.id}`}
+            >
+              <header className="month-column-heading">
+                <h3 id={`months-${group.id}`}>{group.title}</h3>
+                <span className="section-count" aria-label={`${group.rows.length} 个月`}>
+                  {group.rows.length}
+                </span>
+              </header>
+              <div className="month-column-items">
+                {group.rows.map((row) => (
+                  <article
+                    className="month-card"
+                    aria-label={`${row.month} 月度记录`}
+                    key={row.month}
+                  >
+                    <h4>{row.month}</h4>
+                    <dl className="month-values">
+                      <div>
+                        <dt>收入</dt>
+                        <dd>{row.incomeRecorded ? money(row.income) : "未记录"}</dd>
+                      </div>
+                      <div>
+                        <dt>支出</dt>
+                        <dd>{row.expenseRecorded ? money(row.expense) : "未记录"}</dd>
+                      </div>
+                      <div>
+                        <dt>结余{row.recorded && !row.complete ? " *" : ""}</dt>
+                        <dd>
+                          {row.incomeRecorded || row.expenseRecorded
+                            ? money(row.savings)
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>储蓄率</dt>
+                        <dd>{row.rate ?? "—"}</dd>
+                      </div>
+                    </dl>
+                    <div className="month-completeness">
+                      <span>
+                        收入{" "}
+                        <CompletionStatus
+                          complete={periods.get(row.month)?.incomeComplete ?? false}
+                          recorded={row.recorded}
+                        />
+                      </span>
+                      <span>
+                        支出{" "}
+                        <CompletionStatus
+                          complete={periods.get(row.month)?.expenseComplete ?? false}
+                          recorded={row.recorded}
+                        />
+                      </span>
+                    </div>
+                    {row.recorded && !row.complete && (
+                      <p className="month-partial-note">* 结余仅为已记录差额</p>
+                    )}
+                    <MonthActions month={row.month} onOpen={onOpen} busy={busy} />
+                  </article>
+                ))}
+                {!group.rows.length && (
+                  <p className="month-column-empty">暂无此状态的月份</p>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+      <p className="board-scroll-hint">左右滑动查看其他状态，也可切换对比表格。</p>
+    </>
+  );
+}
+function MonthlyTable({ store, year, onOpen, busy }: MonthlyProps) {
   const rows = annualSummary(store, year).months.toReversed();
   return (
     <section className="panel">
@@ -865,7 +1011,12 @@ function MonthlyTable({
         title={`${year} 年每月汇总`}
         subtitle="按月份倒序排列；查看或编辑在弹窗中打开，空白与零分别显示"
       />
-      <div className="table-scroll">
+      <div
+        className="table-scroll"
+        role="region"
+        aria-label="月度汇总表格，可横向滚动"
+        tabIndex={0}
+      >
         <table aria-label={`${year} 年每月汇总`}>
           <thead>
             <tr>
@@ -900,29 +1051,15 @@ function MonthlyTable({
                   );
                   return (
                     <td key={kind}>
-                      {period?.[kind] ? "完整" : row.recorded ? "未完成" : "未记录"}
+                      <CompletionStatus
+                        complete={period?.[kind] ?? false}
+                        recorded={row.recorded}
+                      />
                     </td>
                   );
                 })}
                 <td>
-                  <div className="row-actions">
-                    <button
-                      className="text-button"
-                      aria-label={`查看 ${row.month}`}
-                      disabled={busy}
-                      onClick={() => onOpen(row.month, "view")}
-                    >
-                      查看
-                    </button>
-                    <button
-                      className="text-button"
-                      aria-label={`编辑 ${row.month}`}
-                      disabled={busy}
-                      onClick={() => onOpen(row.month, "edit")}
-                    >
-                      编辑
-                    </button>
-                  </div>
+                  <MonthActions month={row.month} onOpen={onOpen} busy={busy} />
                 </td>
               </tr>
             ))}
@@ -1050,7 +1187,14 @@ function Composition({
     values.set(type, (values.get(type) ?? 0n) + BigInt(b.amountMinor));
   }
   const sum = [...values.values()].reduce((a, b) => a + b, 0n),
-    colors = ["#26745b", "#6e8f80", "#849b8f", "#a3b2a9", "#bcc8c0", "#51695e"];
+    colors = [
+      "var(--chart-category-1)",
+      "var(--chart-category-2)",
+      "var(--chart-category-3)",
+      "var(--chart-category-4)",
+      "var(--chart-category-5)",
+      "var(--chart-category-6)",
+    ];
   const segments = [...values]
     .filter(([, v]) => v > 0n)
     .map(([type, value], i) => ({ type, value, color: colors[i % colors.length] }));
@@ -1307,11 +1451,15 @@ function Assets({
   month,
   owner,
   onRecord,
+  onMonthChange,
+  busy,
 }: {
   store: Store;
   month: string;
   owner: string;
   onRecord: () => void;
+  onMonthChange: (month: string) => void;
+  busy: boolean;
 }) {
   const balances = latestBalances(store, monthEnd(month), owner),
     total = balances.reduce((v, b) => v + BigInt(b.amountMinor), 0n);
@@ -1323,22 +1471,40 @@ function Assets({
     return a.assetEnabled && (owner === "ALL" || (recordedOwner ?? "SHARED") === owner);
   });
   return (
-    <>
-      <div className="asset-summary">
+    <div className="asset-bands">
+      <section className="asset-summary asset-band" aria-label="资产汇总">
         <div>
           <small>截至 {month} 的最近已知资产</small>
           <strong>{balances.length ? money(total) : "—"}</strong>
           <span>未更新的账户沿用旧估值，未知余额不计为零。</span>
         </div>
-        <button className="primary-button" onClick={onRecord}>
-          <Icon name="plus" size={18} />
-          登记新的余额
-        </button>
-      </div>
-      <section className="panel">
+        <div className="asset-period-actions">
+          <label className="period-control">
+            <span>估值月份</span>
+            <input
+              aria-label="记录月份"
+              type="month"
+              value={month}
+              disabled={busy}
+              onChange={(e) => onMonthChange(e.target.value)}
+            />
+          </label>
+          <button className="primary-button" disabled={busy} onClick={onRecord}>
+            <Icon name="plus" size={18} />
+            登记新的余额
+          </button>
+        </div>
+      </section>
+      <section className="panel asset-band" aria-label="账户与资产">
         <PanelTitle title="账户与资产" subtitle="查看每个余额的实际记录日期" />
-        <div className="table-scroll">
-          <table>
+        <p className="table-scroll-hint">左右滑动查看完整账户、余额与估值日期。</p>
+        <div
+          className="table-scroll"
+          role="region"
+          aria-label="资产账户余额，可横向滚动"
+          tabIndex={0}
+        >
+          <table aria-label="资产账户余额">
             <thead>
               <tr>
                 <th>资产账户</th>
@@ -1386,78 +1552,85 @@ function Assets({
           <Empty title="还没有资产账户" text="在账户设置里添加银行、投资、房产或车辆。" />
         )}
       </section>
-      <section className="panel history-panel">
-        <PanelTitle title="估值历史" subtitle="每一次记录都保留，不由月度收支推算" />
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>账户</th>
-                <th>归属</th>
-                <th className="numeric">余额</th>
-                <th>备注</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.balances
-                .filter(
-                  (b) =>
-                    b.asOf <= monthEnd(month) &&
-                    (owner === "ALL" || (b.ownerId ?? "SHARED") === owner),
-                )
-                .toSorted((a, b) => b.asOf.localeCompare(a.asOf))
-                .map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.precision === "MONTH" ? b.asOf.slice(0, 7) : b.asOf}</td>
-                    <td>{store.accounts.find((a) => a.id === b.accountId)?.name}</td>
-                    <td>{ownerName(store, b.ownerId)}</td>
-                    <td className="numeric">{money(b.amountMinor)}</td>
-                    <td>{b.note || "—"}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {store.references.length > 0 && (
-        <details className="panel references">
-          <summary>原始表格汇总参考（不重复计入资产）</summary>
-          <div className="disclosure-content">
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>期间</th>
-                    <th>参考类型</th>
-                    <th>归属</th>
-                    <th>原始值</th>
-                    <th>原始说明</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {store.references
-                    .filter(
-                      (r) =>
-                        r.period <= month &&
-                        (owner === "ALL" || (r.ownerId ?? "SHARED") === owner),
-                    )
-                    .map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.period}</td>
-                        <td>{r.kind}</td>
-                        <td>{ownerName(store, r.ownerId)}</td>
-                        <td>{r.valueMinor !== null ? money(r.valueMinor) : "—"}</td>
-                        <td>{r.note}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+      <section className="asset-band asset-history-band" aria-label="资产历史与参考">
+        <section className="panel history-panel">
+          <PanelTitle title="估值历史" subtitle="每一次记录都保留，不由月度收支推算" />
+          <div
+            className="table-scroll"
+            role="region"
+            aria-label="资产估值历史，可横向滚动"
+            tabIndex={0}
+          >
+            <table aria-label="资产估值历史">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>账户</th>
+                  <th>归属</th>
+                  <th className="numeric">余额</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                {store.balances
+                  .filter(
+                    (b) =>
+                      b.asOf <= monthEnd(month) &&
+                      (owner === "ALL" || (b.ownerId ?? "SHARED") === owner),
+                  )
+                  .toSorted((a, b) => b.asOf.localeCompare(a.asOf))
+                  .map((b) => (
+                    <tr key={b.id}>
+                      <td>{b.precision === "MONTH" ? b.asOf.slice(0, 7) : b.asOf}</td>
+                      <td>{store.accounts.find((a) => a.id === b.accountId)?.name}</td>
+                      <td>{ownerName(store, b.ownerId)}</td>
+                      <td className="numeric">{money(b.amountMinor)}</td>
+                      <td>{b.note || "—"}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           </div>
-        </details>
-      )}
-    </>
+        </section>
+        {store.references.length > 0 && (
+          <details className="panel references">
+            <summary>原始表格汇总参考（不重复计入资产）</summary>
+            <div className="disclosure-content">
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>期间</th>
+                      <th>参考类型</th>
+                      <th>归属</th>
+                      <th>原始值</th>
+                      <th>原始说明</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {store.references
+                      .filter(
+                        (r) =>
+                          r.period <= month &&
+                          (owner === "ALL" || (r.ownerId ?? "SHARED") === owner),
+                      )
+                      .map((r) => (
+                        <tr key={r.id}>
+                          <td>{r.period}</td>
+                          <td>{r.kind}</td>
+                          <td>{ownerName(store, r.ownerId)}</td>
+                          <td>{r.valueMinor !== null ? money(r.valueMinor) : "—"}</td>
+                          <td>{r.note}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        )}
+      </section>
+    </div>
   );
 }
 function Accounts({
@@ -1465,75 +1638,93 @@ function Accounts({
   onEdit,
   onAdd,
   onIncome,
+  busy,
 }: {
   store: Store;
   onEdit: (a: Account) => void;
   onAdd: () => void;
   onIncome: () => void;
+  busy: boolean;
 }) {
+  const sources = store.lines.filter((line) => line.kind === "INCOME");
   return (
-    <>
-      <section className="panel">
-        <PanelTitle
-          title="账户与资产项目"
-          subtitle="归档保留历史，不会自动抹去资产余额"
-          right={
-            <button className="subtle-link" onClick={onAdd}>
-              <Icon name="plus" size={16} />
-              新增账户
-            </button>
-          }
-        />
-        <div className="account-grid">
-          {store.accounts.map((a) => (
-            <button
-              key={a.id}
-              className={`account-card ${a.archived ? "archived" : ""}`}
-              onClick={() => onEdit(a)}
-            >
-              <span className="account-card-icon">
-                <Icon name="wallet" size={23} />
-              </span>
-              <strong>{a.name}</strong>
-              <span>
-                {typeLabels[a.type]} · {ownerName(store, a.ownerId)}
-              </span>
-              <div>
-                <span className="mini-tag">{a.assetEnabled ? "资产" : "仅记账"}</span>
-                {a.expenseEnabled && <span className="mini-tag">月度支出</span>}
-                {a.archived && <span className="mini-tag">已归档</span>}
-              </div>
-            </button>
-          ))}
+    <div className="account-layout">
+      <aside className="account-actions" aria-label="账户操作">
+        <h2>管理账户</h2>
+        <p>添加真实使用的账户与收入来源，每月整理时就能直接填写。</p>
+        <button className="primary-button" disabled={busy} onClick={onAdd}>
+          <Icon name="plus" size={18} />
+          新增账户
+        </button>
+        <button className="secondary-button" disabled={busy} onClick={onIncome}>
+          新增收入来源
+        </button>
+        <div className="account-guidance">
+          <h3>归档，仍保留历史</h3>
+          <p>归档不会清空已有余额。资产处置后，请先登记一次零估值。</p>
         </div>
-        {!store.accounts.length && (
-          <Empty title="先添加一个账户" text="账户名称、归属和类型都可以由你定义。" />
-        )}
-      </section>
-      <section className="panel history-panel">
-        <PanelTitle
-          title="收入来源"
-          subtitle="新增来源会出现在每个月的收入表里"
-          right={
-            <button className="subtle-link" onClick={onIncome}>
-              <Icon name="plus" size={16} />
-              新增来源
-            </button>
-          }
-        />
-        <div className="source-list">
-          {store.lines
-            .filter((l) => l.kind === "INCOME")
-            .map((l) => (
-              <div key={l.id}>
+      </aside>
+      <div className="accounts-main">
+        <section className="panel">
+          <PanelTitle
+            title="账户与资产项目"
+            subtitle="归档保留历史，不会自动抹去资产余额"
+            right={<span className="section-count">{store.accounts.length} 个账户</span>}
+          />
+          <div className="account-list">
+            {store.accounts.map((a) => (
+              <button
+                type="button"
+                key={a.id}
+                className={`account-row${a.archived ? " archived" : ""}`}
+                aria-label={`编辑账户 ${a.name}`}
+                disabled={busy}
+                onClick={() => onEdit(a)}
+              >
+                <span className="account-identity">
+                  <Icon name="wallet" size={20} />
+                  <span>
+                    <strong>{a.name}</strong>
+                    <small>
+                      {typeLabels[a.type]} · {ownerName(store, a.ownerId)}
+                    </small>
+                  </span>
+                </span>
+                <span className="account-capabilities">
+                  <span className="mini-tag">{a.assetEnabled ? "资产" : "仅记账"}</span>
+                  {a.expenseEnabled && <span className="mini-tag">月度支出</span>}
+                  {a.archived && <span className="mini-tag">已归档</span>}
+                </span>
+                <Icon name="arrow" size={16} />
+              </button>
+            ))}
+          </div>
+          {!store.accounts.length && (
+            <Empty title="先添加一个账户" text="账户名称、归属和类型都可以由你定义。" />
+          )}
+        </section>
+        <section className="panel history-panel">
+          <PanelTitle
+            title="收入来源"
+            subtitle="新增来源会出现在每个月的收入表里"
+            right={<span className="section-count">{sources.length} 个来源</span>}
+          />
+          <ul className="income-sources">
+            {sources.map((l) => (
+              <li key={l.id}>
                 <Icon name="down" size={18} />
                 <strong>{l.name}</strong>
                 <span className="owner-tag">{ownerName(store, l.ownerId)}</span>
-              </div>
+                {l.archived && <span className="mini-tag">已归档</span>}
+              </li>
             ))}
-        </div>
-      </section>
-    </>
+          </ul>
+          {!sources.length && (
+            <Empty title="尚未添加收入来源" text="添加工资、股权或其他实际收入来源。" />
+          )}
+        </section>
+      </div>
+    </div>
   );
 }
 function Modal({

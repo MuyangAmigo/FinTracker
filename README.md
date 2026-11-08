@@ -33,9 +33,19 @@ with the navigation collapse control at the bottom; there is no workspace top ba
 The collapsed state is kept in memory across finance routes. The avatar is
 decorative, not proof of identity; Microsoft authentication is unchanged.
 
-The interface follows the system light/dark preference. Four neutral surface
-levels differ by 1% OKLCH lightness in light mode and 2% in dark mode; dark-mode
-font weights are reduced by 40 units. Inputs retain their border on focus and use
+The signed-in workspace uses **Cobalt Ledger**: dark-ink navigation, cool-grey
+surfaces, a cobalt accent, fine dividers, and aligned figures. Its theme is scoped
+to the authenticated shell, including dialogs, and follows the system light/dark
+preference. The overview gives the yearly income/spending chart most of the first
+screen, with compact annual figures at right and a secondary asset section below.
+Monthly accounting opens with three status columns and keeps a comparison-table
+view. Asset management uses three full-width bands with 48px gaps. Account
+settings use a wide main area and a sticky action rail on desktop; the rail moves
+above the lists on smaller screens. There are no canvas, map, or timeline features.
+
+The signed-out landing page keeps its existing visual system. Its four neutral
+surface levels differ by 1% OKLCH lightness in light mode and 2% in dark mode;
+dark-mode font weights are reduced by 40 units. Inputs retain their border on focus and use
 a deeper double shadow ring with an opaque, high-contrast inner ring instead of an
 outline. In Windows High Contrast, where shadows are suppressed, inputs use a
 system-colored outline. The reference disclosure keeps its focus ring inside the
@@ -45,14 +55,15 @@ Both native disclosures animate with a 0fr-to-1fr grid and respect reduced motio
 There are no streaming-text, drag, like, or clipboard-copy controls to animate;
 these rules do not add new product features.
 
-The authenticated workspace uses compact navigation and a ledger-style summary
-with aligned figures rather than colored icon cards. The monthly chart uses green
+The authenticated workspace uses compact navigation and a single main focus
+rather than equal-weight colored icon cards. The monthly chart uses green
 for income and neutral bars for spending, with an exact minor-unit scale and a
 keyboard-focusable horizontal scroll area on narrow screens. Bar heights compare
 absolute amounts; the labelled disclosure retains signed, exact values and
 recorded/missing states. Asset totals appear beside the distribution, whose center
 shows the recorded asset count instead of repeating the total. The signed-out
-landing page is unchanged. This refinement follows
+landing page is unchanged. The retained chart and accessibility details build on
+the earlier refinement following
 [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky (CC BY 4.0).
 
 Finance routes share one authenticated, in-memory session. Navigation reuses the
@@ -119,7 +130,12 @@ users. Keep the password in private local configuration, not source code.
   partial months; savings rates require complete recorded months and positive income.
   Missing income and spending remain distinct from explicitly recorded zero.
 - Monthly accounting shows the same annual totals above the selected year's
-  twelve months in descending order. Collapsed navigation hides the brand text
+  twelve months. The default status board groups them into unrecorded, incomplete,
+  and complete columns with counts, newest first within each column. A month is
+  complete only when both income and spending are complete. Future unrecorded
+  months are not labelled overdue. The comparison table keeps all twelve months
+  in global descending order; changing view does not load or change records.
+  Collapsed navigation hides the brand text
   while keeping the avatar and navigation controls within the sidebar.
   View and edit open in dialogs; closing an unsaved edit requires confirmation.
   Household-owner filters and currency captions are omitted, not ownership checks.
@@ -238,6 +254,24 @@ pnpm api:build
 Database integration tests require `DATABASE_URL` and use an isolated synthetic
 household. They do not modify the real household. CI uses a synthetic PostgreSQL
 service. Only synthetic fixtures belong in public tests.
+
+To check the signed-in layouts without a real sign-in or private data, generate
+the opt-in synthetic HTML fixtures outside the repository, then run the browser
+checker:
+
+```powershell
+$env:BROWSER_ARTIFACT_DIR = 'C:\private\fintracker-ui-check'
+pnpm exec vitest run components\finance-app.test.tsx
+pnpm build
+pnpm test:browser
+```
+
+The checker serves `out` on an available loopback port and stops the preview when
+it finishes. `PREVIEW_URL` can instead point to an existing production-style
+preview, including `/FinTracker`. Set `BROWSER_EXECUTABLE` if Chromium is not in
+Playwright's browser cache. The fixtures are static renders for layout, contrast,
+and keyboard-scroll checks; Vitest covers React interactions and saves. No test
+login, fixtures, or financial data are added to the public application output.
 
 ## Clean Git history
 
