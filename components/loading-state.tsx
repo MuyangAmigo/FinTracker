@@ -1,5 +1,7 @@
 "use client";
 
+import { usePreferences } from "./preferences";
+
 export type FinancePage = "dashboard" | "ledger" | "assets" | "accounts";
 
 const dashboardBars = [
@@ -18,6 +20,7 @@ const dashboardBars = [
 ] as const;
 
 export function BootLoading() {
+  const { t } = usePreferences();
   return (
     <main className="boot-loading" role="status" aria-live="polite">
       <div className="boot-loading-card">
@@ -26,9 +29,9 @@ export function BootLoading() {
         </div>
         <div className="boot-loading-brand" aria-hidden="true">
           FinTracker
-          <small>一起，积累好生活</small>
+          <small>{t.brand.tagline}</small>
         </div>
-        <p className="boot-loading-text">正在打开私人财务空间…</p>
+        <p className="boot-loading-text">{t.boot.opening}</p>
         <div className="boot-loading-track" aria-hidden="true">
           <span className="boot-loading-bar" />
         </div>

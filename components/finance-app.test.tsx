@@ -169,6 +169,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  delete document.documentElement.dataset.theme;
+  document.documentElement.lang = "zh-CN";
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -477,7 +480,9 @@ describe("household interface", () => {
           ".metrics, .setup-banner, .sidebar-note, .sidebar-bottom, footer",
         ),
       ).toBeNull();
-      expect(screen.getAllByRole("button")).toHaveLength(1);
+      const controls = screen.getByRole("group", { name: "显示与语言设置" });
+      expect(within(controls).getAllByRole("button")).toHaveLength(2);
+      expect(screen.getAllByRole("button")).toHaveLength(3);
       expect(
         screen
           .getByRole("banner")
@@ -1117,6 +1122,87 @@ describe("household interface", () => {
     expect(status.textContent).toContain("正在打开私人财务空间…");
     expect(screen.queryByRole("navigation")).toBeNull();
     expect(screen.queryByText(/¥/)).toBeNull();
+  });
+  it("switches language and dark/light mode from the bottom landing controls and persists choices", async () => {
+    mocks.getAllAccounts.mockReturnValue([]);
+    const view = render(<FinanceApp page="dashboard" />);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Microsoft 登录" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    const controls = screen.getByRole("group", { name: "显示与语言设置" });
+    expect(view.container.querySelector(".landing-main")!.lastElementChild).toBe(
+      controls,
+    );
+
+    fireEvent.click(
+      within(controls).getByRole("button", { name: "切换为英文 (Switch to English)" }),
+    );
+    expect(document.documentElement.lang).toBe("en");
+    expect(document.title).toBe("FinTracker · Household Finance");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Live well, keep clear records.",
+    );
+    expect(screen.getByRole("button", { name: "Sign in with Microsoft" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeTruthy();
+
+    view.unmount();
+    render(<FinanceApp page="dashboard" />);
+    expect(screen.getByRole("button", { name: "Sign in with Microsoft" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to light mode" }));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to Chinese (切换为中文)" }),
+    );
+    expect(document.documentElement.lang).toBe("zh-CN");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "把生活过好，把账记清。",
+    );
+  });
+  it("switches language and theme from the bottom of the workspace sidebar, including when collapsed", async () => {
+    const view = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("heading", { name: "收支" });
+    const sidebar = view.container.querySelector(".sidebar")!;
+    const controls = within(sidebar as HTMLElement).getByRole("group", {
+      name: "显示与语言设置",
+    });
+    expect(controls.nextElementSibling).toBe(
+      screen.getByRole("button", { name: "收起导航栏" }),
+    );
+
+    fireEvent.click(
+      within(controls).getByRole("button", { name: "切换为英文 (Switch to English)" }),
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Cash Flow" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Monthly Ledger" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Record year"), { target: { value: "2024" } });
+    expect(view.container.querySelector(".metric-value")!.textContent).toBe("¥100.00");
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    const collapsedControls = within(sidebar as HTMLElement).getByRole("group", {
+      name: "Display and language settings",
+    });
+    expect(
+      within(collapsedControls).getByRole("button", {
+        name: "Switch to Chinese (切换为中文)",
+      }).textContent,
+    ).toBe("");
+    expect(
+      within(collapsedControls).getByRole("button", { name: "Switch to light mode" })
+        .textContent,
+    ).toBe("");
   });
   it
     .runIf(Boolean(process.env.BROWSER_ARTIFACT_DIR))

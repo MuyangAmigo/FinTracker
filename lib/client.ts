@@ -4,6 +4,7 @@ import {
 } from "@azure/msal-browser";
 import { z } from "zod";
 import { accountTypes, monthSchema, dateSchema } from "../shared/finance";
+import { copy, getDocumentLocale } from "./i18n";
 
 export const publicConfig = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
@@ -39,15 +40,16 @@ export async function request(
   method = "GET",
   body?: unknown,
 ): Promise<Response> {
+  const authCopy = copy[getDocumentLocale()].auth;
   const account = auth.getActiveAccount();
-  if (!account) throw new Error("请先使用 Microsoft 账户登录");
+  if (!account) throw new Error(authCopy.signInRequired);
   let token;
   try {
     token = await auth.acquireTokenSilent({ account, scopes: [publicConfig.scope] });
   } catch (error) {
     if (error instanceof InteractionRequiredAuthError) {
       await auth.acquireTokenRedirect({ account, scopes: [publicConfig.scope] });
-      throw new Error("请完成登录授权");
+      throw new Error(authCopy.completeAuth);
     }
     throw error;
   }
@@ -65,7 +67,7 @@ export async function request(
     const parsed = z.object({ error: z.string() }).safeParse(data);
     throw new ApiError(
       response.status,
-      parsed.success ? parsed.data.error : `请求失败 (${response.status})`,
+      parsed.success ? parsed.data.error : authCopy.requestFailed(response.status),
     );
   }
   return response;

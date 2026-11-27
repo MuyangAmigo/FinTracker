@@ -18,8 +18,8 @@
 
 ## ✨ About
 
-FinTracker is a private household finance app with a Chinese interface, built
-for two people sharing one home.
+FinTracker is a private household finance app with a bilingual Chinese/English
+interface, built for two people sharing one home.
 
 Rather than chasing every daily transaction, it focuses on a calmer monthly
 rhythm: recording monthly income and account spending, tracking independent
@@ -68,7 +68,7 @@ The site is designed and built as a quiet, focused workspace with:
 - Annual overview of income, spending, savings rate, and asset distribution
 - Monthly accounting with status-board and comparison-table views
 - Asset valuation history and account management
-- Light and dark themes following system preference
+- Bilingual Chinese/English interface and light/dark themes following system preference, with bottom controls to switch language and theme
 - Layouts for desktop, tablet, and mobile with keyboard navigation
 - Shared in-memory authenticated session with conflict protection
 
