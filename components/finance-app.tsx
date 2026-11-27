@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { configured, publicConfig } from "../lib/client";
 import { useFinanceSession } from "./finance-session";
+import { LoadingBanner, WorkspaceSkeleton } from "./loading-state";
 import {
   accountTypes,
   accountInput,
@@ -490,7 +491,10 @@ export function FinanceApp({ page }: { page: Page }) {
             </div>
           </header>
         )}
-        <main className={signedIn ? "finance-main" : "landing-main"}>
+        <main
+          className={signedIn ? "finance-main" : "landing-main"}
+          aria-busy={loading || (busy && !modal && !ledgerMode)}
+        >
           {signedIn && (
             <div className="page-heading">
               <div>
@@ -504,7 +508,7 @@ export function FinanceApp({ page }: { page: Page }) {
               {error}
               <button
                 className="text-button"
-                disabled={!signedIn && (!configured || loading || busy)}
+                disabled={loading || (!signedIn && (!configured || busy))}
                 onClick={() =>
                   signedIn
                     ? void refresh().catch((e: unknown) => setError(message(e)))
@@ -521,12 +525,19 @@ export function FinanceApp({ page }: { page: Page }) {
             </div>
           )}
           {loading && (
-            <div role="status" className="alert">
-              正在安全加载记录…
-            </div>
+            <LoadingBanner
+              title="正在安全加载记录…"
+              detail={signedIn ? "正在连接私人服务并同步家庭数据" : undefined}
+              compact={!signedIn}
+            />
+          )}
+          {!loading && signedIn && busy && Boolean(store) && !modal && !ledgerMode && (
+            <LoadingBanner title="正在同步最新记录…" compact />
           )}
           {!signedIn ? (
             <Landing />
+          ) : loading && !store ? (
+            <WorkspaceSkeleton page={page} />
           ) : (
             <>
               {page === "dashboard" &&
@@ -1439,6 +1450,7 @@ function Ledger({
         <div className="save-bar">
           <span>保存不会修改任何资产余额。</span>
           <button type="submit" className="primary-button" disabled={busy}>
+            {busy && <span className="button-spinner" aria-hidden="true" />}
             {busy ? "保存中…" : "保存本月记录"}
           </button>
         </div>
@@ -1897,6 +1909,7 @@ function AccountForm({
         </>
       )}
       <button type="submit" className="primary-button" disabled={busy}>
+        {busy && <span className="button-spinner" aria-hidden="true" />}
         {busy ? "保存中…" : "保存"}
       </button>
     </form>
@@ -2009,6 +2022,7 @@ function BalanceForm({
         ))}
       </div>
       <button className="primary-button" disabled={busy || !accounts.length}>
+        {busy && <span className="button-spinner" aria-hidden="true" />}
         {busy ? "保存中…" : "保存本次估值"}
       </button>
     </form>

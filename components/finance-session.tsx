@@ -19,6 +19,7 @@ function useSession() {
   const pending = useRef<Promise<void> | null>(null);
   const generation = useRef(0);
   const loadedAt = useRef(0);
+  const storeRef = useRef<Store | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [loading, setLoading] = useState(configured);
   const [store, setStore] = useState<Store | null>(null);
@@ -29,6 +30,7 @@ function useSession() {
     generation.current++;
     pending.current = null;
     loadedAt.current = 0;
+    storeRef.current = null;
     setStore(null);
   }, []);
 
@@ -52,11 +54,17 @@ function useSession() {
       if (pending.current && !afterSave) return pending.current;
       if (afterSave) generation.current++;
       const currentGeneration = generation.current;
+      const coldLoad = !storeRef.current;
+      if (coldLoad) {
+        setLoading(true);
+        setError("");
+      }
       const load = (async () => {
         const response = await apiRequest("bootstrap");
         const raw: unknown = await response.json();
         const value = storeSchema.parse(raw);
         if (generation.current === currentGeneration) {
+          storeRef.current = value;
           setStore(value);
           loadedAt.current = Date.now();
           setError("");
@@ -67,6 +75,7 @@ function useSession() {
         await load;
       } finally {
         if (pending.current === load) pending.current = null;
+        if (coldLoad && generation.current === currentGeneration) setLoading(false);
       }
     },
     [apiRequest],
@@ -74,6 +83,7 @@ function useSession() {
 
   const refreshIfStale = useCallback(async () => {
     if (!loadedAt.current || Date.now() - loadedAt.current < 60_000) return;
+    storeRef.current = null;
     setStore(null);
     setLoading(true);
     try {
@@ -115,6 +125,7 @@ function useSession() {
   const signOut = async () => {
     invalidate();
     setSignedIn(false);
+    setLoading(false);
     setError("");
     await auth.current?.logoutRedirect();
   };

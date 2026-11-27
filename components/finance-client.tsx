@@ -1,16 +1,13 @@
 "use client";
 import dynamic from "next/dynamic";
+import { BootLoading, type FinancePage } from "./loading-state";
 const Client = dynamic(
   () => import("./finance-app").then((module) => module.FinanceApp),
   {
     ssr: false,
-    loading: () => <main role="status">正在打开私人财务空间…</main>,
+    loading: () => <BootLoading />,
   },
 );
-export function FinanceClient({
-  page,
-}: {
-  page: "dashboard" | "ledger" | "assets" | "accounts";
-}) {
+export function FinanceClient({ page }: { page: FinancePage }) {
   return <Client page={page} />;
 }
