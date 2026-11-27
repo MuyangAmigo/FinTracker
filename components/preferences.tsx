@@ -45,17 +45,18 @@ const defaultPreferences: PreferencesContextValue = {
 const PreferencesContext = createContext<PreferencesContextValue>(defaultPreferences);
 
 const listeners = new Set<() => void>();
-const memoryStorage = new Map<string, string>();
+const memoryStorage = new Map<string, string | null>();
 
 function notifyListeners() {
   for (const listener of listeners) listener();
 }
 
 function readStorage(key: string): string | null {
+  if (memoryStorage.has(key)) return memoryStorage.get(key) ?? null;
   try {
     return window.localStorage.getItem(key);
   } catch {
-    return memoryStorage.get(key) ?? null;
+    return null;
   }
 }
 
@@ -63,9 +64,9 @@ function writeStorage(key: string, value: string | null) {
   try {
     if (value === null) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, value);
+    memoryStorage.delete(key);
   } catch {
-    if (value === null) memoryStorage.delete(key);
-    else memoryStorage.set(key, value);
+    memoryStorage.set(key, value);
   }
 }
 
