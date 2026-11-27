@@ -11,7 +11,9 @@ import {
 } from "react";
 import type { PublicClientApplication } from "@azure/msal-browser";
 import { ApiError, configured, createAuth, request, storeSchema } from "../lib/client";
+import { copy, getDocumentLocale } from "../lib/i18n";
 import type { Store } from "../shared/finance";
+import { PreferencesProvider } from "./preferences";
 
 function useSession() {
   const auth = useRef<PublicClientApplication | null>(null);
@@ -38,7 +40,7 @@ function useSession() {
   const apiRequest = useCallback(
     async (path: string, method = "GET", body?: unknown) => {
       const client = auth.current;
-      if (!client) throw new Error("登录尚未就绪");
+      if (!client) throw new Error(copy[getDocumentLocale()].auth.notReady);
       try {
         return await request(client, path, method, body);
       } catch (error) {
@@ -113,7 +115,12 @@ function useSession() {
           await refresh();
         }
       } catch (error) {
-        if (active) setError(error instanceof Error ? error.message : "操作失败，请重试");
+        if (active)
+          setError(
+            error instanceof Error
+              ? error.message
+              : copy[getDocumentLocale()].auth.genericError,
+          );
       } finally {
         if (active) setLoading(false);
       }
@@ -150,7 +157,11 @@ const FinanceSession = createContext<ReturnType<typeof useSession> | null>(null)
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const session = useSession();
-  return <FinanceSession.Provider value={session}>{children}</FinanceSession.Provider>;
+  return (
+    <PreferencesProvider>
+      <FinanceSession.Provider value={session}>{children}</FinanceSession.Provider>
+    </PreferencesProvider>
+  );
 }
 
 export function useFinanceSession() {
@@ -159,7 +170,11 @@ export function useFinanceSession() {
   const setError = session?.setError;
   useEffect(() => {
     void refreshIfStale?.().catch((error: unknown) =>
-      setError?.(error instanceof Error ? error.message : "操作失败，请重试"),
+      setError?.(
+        error instanceof Error
+          ? error.message
+          : copy[getDocumentLocale()].auth.genericError,
+      ),
     );
   }, [refreshIfStale, setError]);
   if (!session) throw new Error("FinanceProvider is required");

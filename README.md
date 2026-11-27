@@ -1,7 +1,8 @@
 # FinTracker
 
-A small household finance app: Chinese interface, monthly income and account
-spending, independent asset valuations, and shared reports for two people.
+A small household finance app: bilingual Chinese/English interface with
+light/dark mode switching, monthly income and account spending, independent
+asset valuations, and shared reports for two people.
 
 **Financial records live in PostgreSQL, never in this public repository or in
 GitHub Pages files.** There are no daily transactions, bank connections, AI, or
@@ -23,20 +24,25 @@ shows a setup notice and does not pretend to contain or save records.
 Signed-out visitors see a dedicated landing page on every finance route, with
 an accessible personal-avatar button for Microsoft sign-in in place of the
 FinTracker brand icon.
-The three landing-page features sit at the bottom of the page, with their
-numbers left-aligned before the icons. On smaller screens, they follow the
-hero in normal flow without covering content.
+The three landing-page features sit near the bottom of the page, with their
+numbers left-aligned before the icons, followed by bottom controls to switch
+between Chinese and English and between light and dark mode. On smaller screens,
+they follow the hero in normal flow without covering content.
 No empty financial reports, filters,
 or editing controls are shown before sign-in. Restoring a signed-in session opens
 the requested workspace. The sidebar uses the same brand avatar for sign-out,
-with the navigation collapse control at the bottom; there is no workspace top banner.
-The collapsed state is kept in memory across finance routes. The avatar is
+with language, light/dark theme, and navigation collapse controls at the bottom;
+there is no workspace top banner.
+The collapsed state is kept in memory across finance routes, while display
+preferences (language and theme) persist in browser `localStorage` without
+caching any financial records. The avatar is
 decorative, not proof of identity; Microsoft authentication is unchanged.
 
 The signed-in workspace uses **Cobalt Ledger**: dark-ink navigation, cool-grey
 surfaces, a cobalt accent, fine dividers, and aligned figures. Its theme is scoped
-to the authenticated shell, including dialogs, and follows the system light/dark
-preference. The overview gives the yearly income/spending chart most of the first
+to the authenticated shell, including dialogs, follows the system light/dark
+preference by default, and can be switched manually at any time from the bottom
+controls. The overview gives the yearly income/spending chart most of the first
 screen, with compact annual figures at right and a secondary asset section below.
 Monthly accounting opens with three status columns and keeps a comparison-table
 view. Asset management uses three full-width bands with 48px gaps. Account

@@ -144,16 +144,25 @@ try {
         const hero = document.querySelector<HTMLElement>(".landing-hero")!;
         const features = document.querySelector<HTMLElement>(".landing-features")!;
         const setup = document.querySelector<HTMLElement>(".landing-setup");
+        const controls = document.querySelector<HTMLElement>(".landing-controls");
+        if (!controls) return "Missing bottom display and language controls";
         const mainBox = main.getBoundingClientRect();
         const featuresBox = features.getBoundingClientRect();
-        const contentBottom = (setup ?? features).getBoundingClientRect().bottom;
+        const aboveControls = (setup ?? features).getBoundingClientRect();
+        const controlsBox = controls.getBoundingClientRect();
         const paddingBottom = parseFloat(getComputedStyle(main).paddingBottom);
-        if (Math.abs(mainBox.bottom - contentBottom - paddingBottom) > 1)
-          return "Feature row and setup notice are not at the page bottom";
+        if (Math.abs(mainBox.bottom - controlsBox.bottom - paddingBottom) > 1)
+          return "Bottom controls are not anchored at the page bottom";
+        if (controlsBox.top < aboveControls.bottom - 1)
+          return "Bottom controls overlap features or setup notice";
         if (mainBox.bottom < window.innerHeight - 1)
           return "Landing page does not fill the viewport";
         if (featuresBox.top < hero.getBoundingClientRect().bottom - 1)
           return "Feature row overlaps the hero";
+        for (const button of controls.querySelectorAll<HTMLButtonElement>("button")) {
+          if (button.getBoundingClientRect().height < 43)
+            return "Bottom control button is smaller than 44px touch target";
+        }
         for (const feature of features.querySelectorAll(".landing-feature")) {
           const top = feature.querySelector(".landing-feature-top")!;
           const number = top.querySelector("span")!.getBoundingClientRect();
@@ -473,6 +482,25 @@ try {
     await page.emulateMedia({ forcedColors: "none" });
     await page.locator("#presentation-check").evaluate((element) => element.remove());
   }
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${root}/`);
+  await page.locator(".landing-controls").waitFor();
+  await page.getByRole("button", { name: "切换为英文 (Switch to English)" }).click();
+  await page.getByRole("button", { name: "Sign in with Microsoft" }).waitFor();
+  if ((await page.evaluate(() => document.documentElement.lang)) !== "en")
+    throw new Error("Language toggle did not switch document lang to en");
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== "dark")
+    throw new Error("Theme toggle did not switch data-theme to dark");
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== "light")
+    throw new Error("Theme toggle did not switch data-theme to light");
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    delete document.documentElement.dataset.theme;
+    document.documentElement.lang = "zh-CN";
+  });
   const stylesheets = await page
     .locator('link[rel="stylesheet"]')
     .evaluateAll((links) => links.map((link) => (link as HTMLLinkElement).href));
