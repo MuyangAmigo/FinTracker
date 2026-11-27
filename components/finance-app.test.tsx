@@ -14,6 +14,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FinanceApp } from "./finance-app";
 import { FinanceProvider } from "./finance-session";
+import { BootLoading } from "./loading-state";
 import { ApiError, publicConfig } from "../lib/client";
 import type { Store } from "../shared/finance";
 import { monthInput, balanceInput, parseMoney } from "../shared/finance";
@@ -1006,6 +1007,116 @@ describe("household interface", () => {
     await screen.findByRole("alert");
     expect(screen.getByText("服务不可用")).toBeTruthy();
     expect(screen.queryByText("¥100.00")).toBeNull();
+  });
+  it.each(["dashboard", "ledger", "assets", "accounts"] as const)(
+    "shows a page-matched skeleton and status banner on %s while waiting for data",
+    async (page) => {
+      let finishLoad: (response: Response) => void = () => {};
+      mocks.request.mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishLoad = resolve;
+        }),
+      );
+      const { container } = render(<FinanceApp page={page} />);
+      await screen.findByRole("button", { name: "退出登录" });
+      const status = screen.getByRole("status");
+      expect(status.textContent).toContain("正在安全加载记录…");
+      expect(status.closest('[aria-busy="true"]')).toBeNull();
+      const content = container.querySelector(".workspace-content");
+      expect(content?.getAttribute("aria-busy")).toBe("true");
+      const skeleton = container.querySelector(`[data-loading-skeleton="${page}"]`);
+      expect(skeleton).not.toBeNull();
+      expect(skeleton?.getAttribute("aria-hidden")).toBe("true");
+      expect(screen.queryByText(/¥/)).toBeNull();
+
+      await act(async () => finishLoad(new Response(JSON.stringify(store))));
+      await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+      expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+      expect(content?.getAttribute("aria-busy")).toBe("false");
+    },
+  );
+  it("does not show workspace skeletons while signed-out authentication initializes", async () => {
+    let finishInitialization = () => {};
+    mocks.getAllAccounts.mockReturnValue([]);
+    mocks.createAuth.mockReturnValue({
+      ...mocks.createAuth(),
+      initialize: () =>
+        new Promise<void>((resolve) => {
+          finishInitialization = resolve;
+        }),
+    });
+    const { container } = render(<FinanceApp page="dashboard" />);
+    expect(screen.getByRole("status").textContent).toContain("正在安全加载记录…");
+    expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+    finishInitialization();
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+  it("shows the loading skeleton again when retrying after an initial API failure", async () => {
+    mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
+    const { container } = render(<FinanceApp page="dashboard" />);
+    await screen.findByRole("alert");
+    expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+
+    let finishRetry: (response: Response) => void = () => {};
+    mocks.request.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        finishRetry = resolve;
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("正在安全加载记录…");
+    expect(container.querySelector('[data-loading-skeleton="dashboard"]')).not.toBeNull();
+
+    await act(async () => finishRetry(new Response(JSON.stringify(store))));
+    await screen.findByRole("heading", { name: "收支" });
+    expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+  it.each([401, 403])(
+    "clears loading and keeps reload usable when a cold-load retry returns %s",
+    async (status) => {
+      mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
+      const { container } = render(<FinanceApp page="dashboard" />);
+      await screen.findByRole("alert");
+
+      mocks.request.mockRejectedValueOnce(new ApiError(status, "访问权限已撤销"));
+      fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("访问权限已撤销");
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+      expect(
+        (screen.getByRole("button", { name: "重新加载" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    },
+  );
+  it("shows a sync loading banner while refreshing records after a save", async () => {
+    render(<FinanceApp page="ledger" />);
+    await editMonth();
+    fireEvent.change(screen.getByLabelText("Salary 金额"), {
+      target: { value: "234.56" },
+    });
+    let finishLoad: (response: Response) => void = () => {};
+    mocks.request
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ saved: true })))
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishLoad = resolve;
+        }),
+      );
+    fireEvent.click(screen.getByRole("button", { name: "保存本月记录" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("status").textContent).toContain("正在同步最新记录…");
+    await act(async () => finishLoad(new Response(JSON.stringify(store))));
+    await screen.findByText("已保存");
+  });
+  it("renders the boot loading screen without exposing financial controls", () => {
+    renderView(<BootLoading />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("正在打开私人财务空间…");
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByText(/¥/)).toBeNull();
   });
   it
     .runIf(Boolean(process.env.BROWSER_ARTIFACT_DIR))
