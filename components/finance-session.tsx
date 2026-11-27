@@ -32,6 +32,7 @@ function useSession() {
     loadedAt.current = 0;
     storeRef.current = null;
     setStore(null);
+    setLoading(false);
   }, []);
 
   const apiRequest = useCallback(
@@ -125,7 +126,6 @@ function useSession() {
   const signOut = async () => {
     invalidate();
     setSignedIn(false);
-    setLoading(false);
     setError("");
     await auth.current?.logoutRedirect();
   };

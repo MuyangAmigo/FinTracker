@@ -1021,7 +1021,9 @@ describe("household interface", () => {
       await screen.findByRole("button", { name: "退出登录" });
       const status = screen.getByRole("status");
       expect(status.textContent).toContain("正在安全加载记录…");
-      expect(screen.getByRole("main").getAttribute("aria-busy")).toBe("true");
+      expect(status.closest('[aria-busy="true"]')).toBeNull();
+      const content = container.querySelector(".workspace-content");
+      expect(content?.getAttribute("aria-busy")).toBe("true");
       const skeleton = container.querySelector(`[data-loading-skeleton="${page}"]`);
       expect(skeleton).not.toBeNull();
       expect(skeleton?.getAttribute("aria-hidden")).toBe("true");
@@ -1030,7 +1032,7 @@ describe("household interface", () => {
       await act(async () => finishLoad(new Response(JSON.stringify(store))));
       await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
       expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
-      expect(screen.getByRole("main").getAttribute("aria-busy")).toBe("false");
+      expect(content?.getAttribute("aria-busy")).toBe("false");
     },
   );
   it("does not show workspace skeletons while signed-out authentication initializes", async () => {
@@ -1071,6 +1073,24 @@ describe("household interface", () => {
     expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
+  it.each([401, 403])(
+    "clears loading and keeps reload usable when a cold-load retry returns %s",
+    async (status) => {
+      mocks.request.mockRejectedValueOnce(new Error("服务暂时不可用"));
+      const { container } = render(<FinanceApp page="dashboard" />);
+      await screen.findByRole("alert");
+
+      mocks.request.mockRejectedValueOnce(new ApiError(status, "访问权限已撤销"));
+      fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("访问权限已撤销");
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(container.querySelector("[data-loading-skeleton]")).toBeNull();
+      expect(
+        (screen.getByRole("button", { name: "重新加载" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    },
+  );
   it("shows a sync loading banner while refreshing records after a save", async () => {
     render(<FinanceApp page="ledger" />);
     await editMonth();

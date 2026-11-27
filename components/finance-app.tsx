@@ -491,10 +491,7 @@ export function FinanceApp({ page }: { page: Page }) {
             </div>
           </header>
         )}
-        <main
-          className={signedIn ? "finance-main" : "landing-main"}
-          aria-busy={loading || (busy && !modal && !ledgerMode)}
-        >
+        <main className={signedIn ? "finance-main" : "landing-main"}>
           {signedIn && (
             <div className="page-heading">
               <div>
@@ -536,123 +533,139 @@ export function FinanceApp({ page }: { page: Page }) {
           )}
           {!signedIn ? (
             <Landing />
-          ) : loading && !store ? (
-            <WorkspaceSkeleton page={page} />
           ) : (
-            <>
-              {page === "dashboard" &&
-                (store ? (
-                  <Dashboard
-                    store={store}
-                    year={year}
-                    asOf={asOf}
-                    yearControl={yearControl}
-                  />
-                ) : (
-                  <section className="panel">
-                    <Empty title="财务总览" text="正在等待真实家庭记录。" />
-                  </section>
-                ))}
-              {page === "ledger" &&
-                (store ? (
-                  <>
-                    <section className="ledger-summary" aria-label={`${year} 年收支汇总`}>
-                      <div className="section-heading">
-                        <div>
-                          <h2>本年汇总</h2>
-                          <p>已登记数据，未记录不代表零</p>
-                        </div>
-                        {yearControl}
+            <div
+              className="workspace-content"
+              aria-busy={loading || (busy && !modal && !ledgerMode)}
+            >
+              {loading && !store ? (
+                <WorkspaceSkeleton page={page} />
+              ) : (
+                <>
+                  {page === "dashboard" &&
+                    (store ? (
+                      <Dashboard
+                        store={store}
+                        year={year}
+                        asOf={asOf}
+                        yearControl={yearControl}
+                      />
+                    ) : (
+                      <section className="panel">
+                        <Empty title="财务总览" text="正在等待真实家庭记录。" />
+                      </section>
+                    ))}
+                  {page === "ledger" &&
+                    (store ? (
+                      <>
+                        <section
+                          className="ledger-summary"
+                          aria-label={`${year} 年收支汇总`}
+                        >
+                          <div className="section-heading">
+                            <div>
+                              <h2>本年汇总</h2>
+                              <p>已登记数据，未记录不代表零</p>
+                            </div>
+                            {yearControl}
+                          </div>
+                          <AnnualMetrics store={store} year={year} />
+                        </section>
+                        <MonthlyRecords
+                          store={store}
+                          year={year}
+                          onOpen={selectMonth}
+                          busy={busy}
+                        />
+                      </>
+                    ) : (
+                      <section className="panel">
+                        <Empty
+                          title="月度记账"
+                          text="登录并连接私人 API 后，即可批量录入每个月的收入与账户支出。"
+                        />
+                      </section>
+                    ))}
+                  {page === "assets" &&
+                    (store ? (
+                      <Assets
+                        store={store}
+                        month={month}
+                        owner="ALL"
+                        onRecord={() => open("balance")}
+                        busy={busy}
+                        onMonthChange={(value) => {
+                          if (value && guardNavigation()) {
+                            setMonth(value);
+                            setDirty(false);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <section className="panel">
+                        <Empty
+                          title="资产管理"
+                          text="登记实际资产余额，保留每一次估值的历史。"
+                        />
+                      </section>
+                    ))}
+                  {page === "accounts" &&
+                    (store ? (
+                      <Accounts
+                        store={store}
+                        onEdit={(a) => open("account", a)}
+                        onAdd={() => open("account")}
+                        onIncome={() => open("income")}
+                        busy={busy}
+                      />
+                    ) : (
+                      <section className="panel">
+                        <Empty
+                          title="你的账户，你来定义"
+                          text="信用卡、公用小荷包、存款、投资、房产和车辆，都能在这里管理。"
+                        />
+                      </section>
+                    ))}
+                  {store && (
+                    <div className="export-bar">
+                      <span>你的记录，始终由你掌握。</span>
+                      <button onClick={() => void download("monthly")}>
+                        导出月度收支
+                      </button>
+                      <button onClick={() => void download("assets")}>
+                        导出资产历史
+                      </button>
+                      <button onClick={() => void download("backup")}>
+                        完整数据备份
+                      </button>
+                    </div>
+                  )}
+                  {ledgerMode && !modal && store && (
+                    <Modal
+                      title={`${month} ${ledgerMode === "view" ? "收支详情" : "编辑月度记录"}`}
+                      onClose={closeLedger}
+                      busy={busy}
+                      wide
+                    >
+                      <div className="monthly-dialog">
+                        <Ledger
+                          key={`${month}:${period?.version ?? 0}:${ledgerMode}`}
+                          store={store}
+                          month={month}
+                          owner="ALL"
+                          mutate={mutate}
+                          busy={busy}
+                          onDirty={setDirty}
+                          onAddAccount={() => open("account")}
+                          onAddIncome={() => open("income")}
+                          readOnly={ledgerMode === "view"}
+                        />
                       </div>
-                      <AnnualMetrics store={store} year={year} />
-                    </section>
-                    <MonthlyRecords
-                      store={store}
-                      year={year}
-                      onOpen={selectMonth}
-                      busy={busy}
-                    />
-                  </>
-                ) : (
-                  <section className="panel">
-                    <Empty
-                      title="月度记账"
-                      text="登录并连接私人 API 后，即可批量录入每个月的收入与账户支出。"
-                    />
-                  </section>
-                ))}
-              {page === "assets" &&
-                (store ? (
-                  <Assets
-                    store={store}
-                    month={month}
-                    owner="ALL"
-                    onRecord={() => open("balance")}
-                    busy={busy}
-                    onMonthChange={(value) => {
-                      if (value && guardNavigation()) {
-                        setMonth(value);
-                        setDirty(false);
-                      }
-                    }}
-                  />
-                ) : (
-                  <section className="panel">
-                    <Empty
-                      title="资产管理"
-                      text="登记实际资产余额，保留每一次估值的历史。"
-                    />
-                  </section>
-                ))}
-              {page === "accounts" &&
-                (store ? (
-                  <Accounts
-                    store={store}
-                    onEdit={(a) => open("account", a)}
-                    onAdd={() => open("account")}
-                    onIncome={() => open("income")}
-                    busy={busy}
-                  />
-                ) : (
-                  <section className="panel">
-                    <Empty
-                      title="你的账户，你来定义"
-                      text="信用卡、公用小荷包、存款、投资、房产和车辆，都能在这里管理。"
-                    />
-                  </section>
-                ))}
-              {store && (
-                <div className="export-bar">
-                  <span>你的记录，始终由你掌握。</span>
-                  <button onClick={() => void download("monthly")}>导出月度收支</button>
-                  <button onClick={() => void download("assets")}>导出资产历史</button>
-                  <button onClick={() => void download("backup")}>完整数据备份</button>
-                </div>
+                    </Modal>
+                  )}
+                </>
               )}
-              {ledgerMode && !modal && store && (
-                <Modal
-                  title={`${month} ${ledgerMode === "view" ? "收支详情" : "编辑月度记录"}`}
-                  onClose={closeLedger}
-                  busy={busy}
-                  wide
-                >
-                  <div className="monthly-dialog">
-                    <Ledger
-                      key={`${month}:${period?.version ?? 0}:${ledgerMode}`}
-                      store={store}
-                      month={month}
-                      owner="ALL"
-                      mutate={mutate}
-                      busy={busy}
-                      onDirty={setDirty}
-                      onAddAccount={() => open("account")}
-                      onAddIncome={() => open("income")}
-                      readOnly={ledgerMode === "view"}
-                    />
-                  </div>
-                </Modal>
-              )}
-            </>
+            </div>
           )}
         </main>
       </div>
