@@ -1,291 +1,84 @@
+<div align="center">
+
 # FinTracker
 
-A small household finance app: bilingual Chinese/English interface with
-light/dark mode switching, monthly income and account spending, independent
-asset valuations, and shared reports for two people.
+把生活过好，把账记清。
 
-**Financial records live in PostgreSQL, never in this public repository or in
-GitHub Pages files.** There are no daily transactions, bank connections, AI, or
-budget features.
+</div>
 
-## Architecture
+<div align="center">
+  <a href="https://muyangamigo.github.io/FinTracker/">
+    <img
+      src="./docs/fintracker-preview.png"
+      alt="FinTracker landing page in Chinese, showing the household ledger preview"
+    />
+    <br />
+  </a>
+</div>
 
-- **Interface:** Next.js static export, React, TypeScript, and GitHub Pages.
-- **API:** Azure Functions v4 / TypeScript. Every finance request requires a
-  Microsoft access token and server-side household authorization.
-- **Database:** PostgreSQL with Prisma migrations.
-- **Sign-in:** MSAL authorization-code flow with PKCE, including Microsoft
-  personal accounts. Only two configured identities can access the household.
+## ✨ About
 
-GitHub Pages hosts public application code, not private data. It cannot run a
-database or a server API. Without configured authentication/backend, the site
-shows a setup notice and does not pretend to contain or save records.
+FinTracker is a private household finance app with a bilingual Chinese/English
+interface, built for two people sharing one home.
 
-Signed-out visitors see a dedicated landing page on every finance route, with
-an accessible personal-avatar button for Microsoft sign-in in place of the
-FinTracker brand icon.
-The three landing-page features sit near the bottom of the page, with their
-numbers left-aligned before the icons, followed by bottom controls to switch
-between Chinese and English and between light and dark mode. On smaller screens,
-they follow the hero in normal flow without covering content.
-No empty financial reports, filters,
-or editing controls are shown before sign-in. Restoring a signed-in session opens
-the requested workspace. The sidebar uses the same brand avatar for sign-out,
-with language, light/dark theme, and navigation collapse controls at the bottom;
-there is no workspace top banner.
-The collapsed state is kept in memory across finance routes, while display
-preferences (language and theme) persist in browser `localStorage` without
-caching any financial records. The avatar is
-decorative, not proof of identity; Microsoft authentication is unchanged.
+Rather than chasing every daily transaction, it focuses on a calmer monthly
+rhythm: recording monthly income and account spending, tracking independent
+asset valuations, and reviewing shared annual reports. There are no bank
+connections, AI, or budget features.
 
-The signed-in workspace uses **Cobalt Ledger**: dark-ink navigation, cool-grey
-surfaces, a cobalt accent, fine dividers, and aligned figures. Its theme is scoped
-to the authenticated shell, including dialogs, follows the system light/dark
-preference by default, and can be switched manually at any time from the bottom
-controls. The overview gives the yearly income/spending chart most of the first
-screen, with compact annual figures at right and a secondary asset section below.
-Monthly accounting opens with three status columns and keeps a comparison-table
-view. Asset management uses three full-width bands with 48px gaps. Account
-settings use a wide main area and a sticky action rail on desktop; the rail moves
-above the lists on smaller screens. There are no canvas, map, or timeline features.
+## 📒 The ledger
 
-The signed-out landing page keeps its existing visual system. Its four neutral
-surface levels differ by 1% OKLCH lightness in light mode and 2% in dark mode;
-dark-mode font weights are reduced by 40 units. Inputs retain their border on focus and use
-a deeper double shadow ring with an opaque, high-contrast inner ring instead of an
-outline. In Windows High Contrast, where shadows are suppressed, inputs use a
-system-colored outline. The reference disclosure keeps its focus ring inside the
-panel to avoid clipping. Shared icons sit 0.125em
-lower, numbers use tabular figures, and body copy uses pretty wrapping.
-Both native disclosures animate with a 0fr-to-1fr grid and respect reduced motion.
-There are no streaming-text, drag, like, or clipboard-copy controls to animate;
-these rules do not add new product features.
+<table>
+  <tr>
+    <td width="50%">
+      <strong>Monthly rhythm</strong><br />
+      Record income and account spending once a month, keeping blank entries distinct from an explicit zero.
+    </td>
+    <td width="50%">
+      <strong>Independent assets</strong><br />
+      Track savings, investments, property, and vehicles with point-in-time valuations separate from monthly cash flow.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Shared, never doubled</strong><br />
+      Separate personal and shared accounts clearly so joint spending counts once across household reports.
+    </td>
+    <td width="50%">
+      <strong>History preserved</strong><br />
+      Archiving retains past balances, reports keep each valuation's original date, and version checks guard against stale edits.
+    </td>
+  </tr>
+</table>
 
-The authenticated workspace uses compact navigation and a single main focus
-rather than equal-weight colored icon cards. The monthly chart uses green
-for income and neutral bars for spending, with an exact minor-unit scale and a
-keyboard-focusable horizontal scroll area on narrow screens. Bar heights compare
-absolute amounts; the labelled disclosure retains signed, exact values and
-recorded/missing states. Asset totals appear beside the distribution, whose center
-shows the recorded asset count instead of repeating the total. The signed-out
-landing page is unchanged. The retained chart and accessibility details build on
-the earlier refinement following
-[Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky (CC BY 4.0).
+## 🔒 A private space
 
-Finance routes share one authenticated, in-memory session. Navigation reuses the
-loaded records instead of repeating Microsoft initialization and downloading the
-whole household again. Successful saves reload server records and versions.
-Entering another route reloads records older than one minute before editing;
-version checks still reject stale writes.
-Signing out or receiving 401/403 from any API call, including saves and exports,
-clears the in-memory records and invalidates pending loads. A transient reload
-failure keeps the last successful timestamp, so entering another route retries
-stale records. No finance data is cached in browser storage.
-Large API JSON responses use gzip when requested, with `no-store`
-preserved. The API compression change requires a separate backend deployment.
+The public landing page shows no financial controls or records. Access requires
+an authorized Microsoft account validated against a private server-side
+allowlist.
 
-## Development
+Financial records live in PostgreSQL, never in this public repository or in
+GitHub Pages files. Exports stay authenticated, and no finance data is cached in
+browser storage.
 
-Use Node.js 22+ and pnpm 9:
+## 🧭 Behind the app
 
-```powershell
-pnpm install --frozen-lockfile
-pnpm db:generate
-pnpm dev
-```
+The site is designed and built as a quiet, focused workspace with:
 
-The default site path is `/FinTracker/`, including locally. Set
-`NEXT_PUBLIC_BASE_PATH` to an empty string before building if deploying at a
-domain root.
+- Annual overview of income, spending, savings rate, and asset distribution
+- Monthly accounting with status-board and comparison-table views
+- Asset valuation history and account management
+- Bilingual Chinese/English interface and light/dark themes following system preference, with bottom controls to switch language and theme
+- Layouts for desktop, tablet, and mobile with keyboard navigation
+- Shared in-memory authenticated session with conflict protection
 
-Copy `.env.example` to `.env.local` and provide the public API/client settings.
-Never put a client secret, database URL, or Function key in a `NEXT_PUBLIC_*`
-variable. The frontend build does not need or query the finance database.
+It is built with Next.js and hosted on GitHub Pages, backed by a TypeScript API
+and PostgreSQL with Prisma.
 
-### Local API and database
+---
 
-Install Azure Functions Core Tools v4 and use PostgreSQL. Copy
-`api/local.settings.example.json` to `api/local.settings.json`; this file is
-ignored. Set the database URL and the allowed identity tuples:
-`tenantId`, `objectId`, and the imported database `personId`.
+<div align="center">
 
-```powershell
-$env:DATABASE_URL = 'YOUR_PRIVATE_DATABASE_URL'
-pnpm db:migrate
-pnpm api:dev
-```
+<sub>Life in balance. Progress in view. | 生活有度，积累有迹。</sub>
 
-An optional development-only PostgreSQL launcher is included when PostgreSQL is
-not installed. It binds only to loopback, requires a password, uses UTF-8, and
-persists files outside the repository:
-
-```powershell
-$env:LOCAL_DATABASE_DIR = 'C:\private\fintracker-db'
-$env:LOCAL_DATABASE_PASSWORD = 'SET_A_PRIVATE_RANDOM_PASSWORD'
-pnpm db:local
-```
-
-Stop the command after use. It does not provision Azure resources or create OS
-users. Keep the password in private local configuration, not source code.
-
-## Monthly records and assets
-
-- The overview defaults to the current year, with a year selector in the
-  income/spending heading and two sections:
-  income/spending and assets. Annual totals include all recorded amounts, including
-  partial months; savings rates require complete recorded months and positive income.
-  Missing income and spending remain distinct from explicitly recorded zero.
-- Monthly accounting shows the same annual totals above the selected year's
-  twelve months. The default status board groups them into unrecorded, incomplete,
-  and complete columns with counts, newest first within each column. A month is
-  complete only when both income and spending are complete. Future unrecorded
-  months are not labelled overdue. The comparison table keeps all twelve months
-  in global descending order; changing view does not load or change records.
-  Collapsed navigation hides the brand text
-  while keeping the avatar and navigation controls within the sidebar.
-  View and edit open in dialogs; closing an unsaved edit requires confirmation.
-  Household-owner filters and currency captions are omitted, not ownership checks.
-  Income and spending completion statuses are shown independently.
-  Previous/next-year controls allow entering the first record in an unrecorded
-  year. Monthly view/edit actions stay disabled until a save and its refresh finish.
-- Asset distribution uses the latest known balances as of the selected year end
-  (today for the current year). Asset management retains account balances and
-  their valuation history; asset trend charts are not shown.
-- Add income sources, accounts, owners, and asset items from the interface.
-- One month/account or month/income-source row represents the monthly amount.
-  Blank is unrecorded; `0.00` is explicitly recorded zero.
-- Mark income and expenses complete independently. Partial months are labelled;
-  savings rates require complete records and positive income.
-- Shared spending counts once. It is not split automatically between people.
-- Monthly income and expenses never change asset balances.
-- Valuations can update selected accounts only. Omitted accounts are not reset.
-- Reports use each account's latest known balance on or before the selected
-  period and show the original valuation date. Missing balances are unknown.
-- Property and vehicle values are assets, not duplicate financial subtotals.
-- Archiving retains history and nonzero balances. A disposal needs a zero
-  valuation; historical asset reporting cannot be silently disabled.
-- Concurrent saves use versions. A stale update returns a conflict rather than
-  overwriting the other person's work.
-
-## Private import and recovery
-
-All source inputs and generated financial files must be outside the repository.
-The importer never runs as part of a Pages build.
-
-```powershell
-pnpm data:normalize --csv-dir C:\private\csv --supplement C:\private\supplement.json --out C:\private\dataset.json --report C:\private\normalization.json
-pnpm data:import --input C:\private\dataset.json --report C:\private\reconciliation.json --check-only
-$env:DATABASE_URL = 'YOUR_PRIVATE_DATABASE_URL'
-pnpm data:import --input C:\private\dataset.json --report C:\private\reconciliation.json
-```
-
-The supplement contains two person names, optional account-name aliases,
-monthly screenshot rows, asset-sheet rows, and property/vehicle valuations.
-The schemas and synthetic tests document the format. Repeated CSV history is
-deduplicated; supplied screenshot rows override older CSV values. Unresolved
-CSV conflicts make normalization fail for review.
-
-The report retains original totals and exact differences. Source formulas,
-rounding, and date mismatches are not silently corrected. Derived totals are
-never loaded as additional asset accounts.
-
-Import is restartable and idempotent. It preserves manually edited months and
-valuations. Exports are authenticated downloads, not public URLs. A versioned
-JSON backup includes household metadata and all records and can be passed to
-`data:import` to restore into a fresh migrated database. Make regular managed
-PostgreSQL backups too; test recovery on a separate database before relying on it.
-
-## Deployment
-
-The GitHub Pages workflow publishes **only `out`**, not the checkout root.
-The expected URL is `https://muyangamigo.github.io/FinTracker/`.
-
-Set these repository variables before enabling private data access:
-
-| Variable                | Purpose                                |
-| ----------------------- | -------------------------------------- |
-| `NEXT_PUBLIC_API_URL`   | Function API root, ending in `/api`    |
-| `NEXT_PUBLIC_CLIENT_ID` | Microsoft SPA client ID                |
-| `NEXT_PUBLIC_API_SCOPE` | Exposed FinTracker API delegated scope |
-
-Register the full Pages URL as a **SPA redirect URI**. The browser sends bearer
-tokens to the API; cross-site session cookies are not required. The API validates
-Microsoft signatures, issuer, audience, expiry, scope, and the allowed
-tenant/object IDs. It rejects ID tokens and Graph tokens.
-Set the API app registration's `requestedAccessTokenVersion` to `2`. Configure
-the allowed identity tenant/object IDs from the users' validated token claims,
-not from the subscription's directory ID. Personal accounts use the Microsoft
-consumer tenant in their tokens.
-
-The current deployment follows the referenced Microsoft personal-account
-authentication: the consumer issuer, app audience, and `FinTracker.Access`
-delegated scope are validated, then the immutable `sub` is matched to the private
-server allowlist. Email addresses are not authorization keys and are not
-published in frontend configuration. One account is enabled initially.
-
-The existing personal App Service can run the same API through
-`node dist/api/src/server.js`; its existing PostgreSQL database is reused with
-new tables while legacy tables remain unchanged. This requires no new hosting
-or database resources. Set backend-only `ALLOWED_MICROSOFT_SUB` and
-`AUTH_PERSON_ID` for this consumer-subject configuration. The Functions host
-remains supported with `npm run start:functions`.
-
-Configure backend-only settings in the Function App: `DATABASE_URL`,
-`HOUSEHOLD_ID`, `API_AUDIENCE`, `API_SCOPE`, `ALLOWED_IDENTITIES`, and
-`ALLOWED_ORIGINS`. The allowed Pages origin is `https://muyangamigo.github.io`,
-without `/FinTracker/`; add localhost only for development. CORS is not an
-authorization mechanism.
-
-The Functions HTTP trigger uses custom bearer-token authorization, not exposed
-Function keys. Its host-level anonymous setting does **not** bypass the
-application's authorization gate. OPTIONS requests perform preflight only and
-return no records.
-
-Azure deployment is separate. Confirm the **personal subscription**, region,
-costs, storage, database networking, backups, and identity registrations before
-creating resources. The manual backend workflow requires configured OIDC and an
-approved target; do not reuse the previous App Service automatically.
-
-## Checks
-
-```powershell
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm check:public
-pnpm api:build
-```
-
-Database integration tests require `DATABASE_URL` and use an isolated synthetic
-household. They do not modify the real household. CI uses a synthetic PostgreSQL
-service. Only synthetic fixtures belong in public tests.
-
-To check the signed-in layouts without a real sign-in or private data, generate
-the opt-in synthetic HTML fixtures outside the repository, then run the browser
-checker:
-
-```powershell
-$env:BROWSER_ARTIFACT_DIR = 'C:\private\fintracker-ui-check'
-pnpm exec vitest run components\finance-app.test.tsx
-pnpm build
-pnpm test:browser
-```
-
-The checker serves `out` on an available loopback port and stops the preview when
-it finishes. `PREVIEW_URL` can instead point to an existing production-style
-preview, including `/FinTracker`. Set `BROWSER_EXECUTABLE` if Chromium is not in
-Playwright's browser cache. The fixtures are static renders for layout, contrast,
-and keyboard-scroll checks; Vitest covers React interactions and saves. No test
-login, fixtures, or financial data are added to the public application output.
-
-## Clean Git history
-
-The previous repository history was replaced with a new code-only root. Old
-financial files, feature branches, and legacy deployment logs were removed.
-**Do not merge or push branches from an old clone:** that can reintroduce the
-removed data. Use a fresh clone or carefully transfer code-only patches.
-
-A history rewrite cannot erase downloaded copies, forks, or all GitHub cached/PR
-references. The owner must contact GitHub Support for retained sensitive-data
-views. No claim is made that every previously public copy has been erased.
+</div>
